@@ -30,6 +30,7 @@ import net.fretux.adaptivemobs.ai.goals.AdaptiveTargetPriorityGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveThreatMemoryGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveWardenTacticsGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveWitchTacticsGoal;
+import net.fretux.adaptivemobs.ai.goals.AdaptiveZombiePackTacticsGoal;
 import net.fretux.adaptivemobs.config.AMConfig;
 import net.fretux.adaptivemobs.difficulty.AdaptiveDifficultyManager;
 import net.minecraft.server.level.ServerLevel;
@@ -101,6 +102,7 @@ public final class AdaptiveGoalInjector {
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 8.0D, 1.0D, true));
         } else if (pathfinder != null && mob instanceof Zombie && AMConfig.AI_ZOMBIE.get()) {
             mob.goalSelector.addGoal(3, new AdaptiveFlankGoal(pathfinder, tier, 2, 2.5D, 1.05D, true));
+            mob.goalSelector.addGoal(2, new AdaptiveZombiePackTacticsGoal((Zombie) mob, tier));
         } else if (pathfinder != null && mob instanceof Creeper creeper && AMConfig.AI_CREEPER.get()) {
             mob.goalSelector.addGoal(2, new AdaptiveCreeperPressureGoal(creeper, tier));
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 3.0D, 1.0D, false));
@@ -141,7 +143,7 @@ public final class AdaptiveGoalInjector {
             mob.goalSelector.addGoal(8, new AdaptiveBiomeTacticsGoal(pathfinder, tier));
         }
         if (pathfinder != null && AMConfig.ENABLE_ANTI_CHEESE_AI.get()) {
-            mob.goalSelector.addGoal(7, new AdaptiveAntiCheeseGoal(pathfinder, tier));
+            mob.goalSelector.addGoal(mob instanceof Zombie ? 1 : 7, new AdaptiveAntiCheeseGoal(pathfinder, tier));
         }
         if (pathfinder != null && isRangedMob(mob) && rangedEnabled(mob)) {
             mob.goalSelector.addGoal(3, new AdaptiveRangedAttackGoal(pathfinder, tier, rangedOptimalRange(mob), 1.0D));
@@ -158,8 +160,8 @@ public final class AdaptiveGoalInjector {
         }
         if (pathfinder != null && mob instanceof Spider && AMConfig.ENABLE_SPIDER_AI.get() && AMConfig.AI_SPIDER.get()) {
             mob.goalSelector.addGoal(3, new AdaptiveSpiderTacticsGoal(pathfinder, tier, mob instanceof CaveSpider));
-            mob.goalSelector.addGoal(6, new AdaptiveSpiderDisengageGoal(pathfinder, tier, mob instanceof CaveSpider ? 4 : 5, 0.25D, 1.2D));
-            mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.28D, 1.15D));
+            mob.goalSelector.addGoal(2, new AdaptiveSpiderDisengageGoal(pathfinder, tier, mob instanceof CaveSpider ? 3 : 4, 0.14D, 1.3D));
+            mob.goalSelector.addGoal(5, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.38D, 1.15D));
         }
         if (mob instanceof Witch witch && AMConfig.ENABLE_WITCH_AI.get() && AMConfig.AI_WITCH.get()) {
             mob.goalSelector.addGoal(3, new AdaptiveWitchTacticsGoal(witch, tier));

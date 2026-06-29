@@ -38,16 +38,24 @@ public class AdaptiveAntiCheeseGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return AMConfig.ENABLE_ANTI_CHEESE_AI.get()
-                && tierSupplier.getAsInt() >= 3
-                && mob.getTarget() != null
-                && mob.getTarget().isAlive()
-                && --cooldown <= 0;
+        if (!AMConfig.ENABLE_ANTI_CHEESE_AI.get() || tierSupplier.getAsInt() < 3) {
+            return false;
+        }
+        LivingEntity target = mob.getTarget();
+        if (target == null || !target.isAlive()) {
+            return false;
+        }
+        if (isInTrapVehicle() || isNearTrapVehicle()) {
+            return true;
+        }
+        if (tierSupplier.getAsInt() >= 5 && mob instanceof Zombie && isVerticalObstacleCheese(target)) {
+            return true;
+        }
+        return --cooldown <= 0;
     }
 
     @Override
     public void start() {
-        cooldown = 55 + mob.getRandom().nextInt(80);
         LivingEntity target = mob.getTarget();
         if (target == null) {
             return;
@@ -55,8 +63,10 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
 
         if (avoidTrap()) {
+            cooldown = 8 + mob.getRandom().nextInt(16);
             return;
         }
+        cooldown = 55 + mob.getRandom().nextInt(80);
         if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
             if (tryCorpseLadderSurge(target)) {
                 return;
@@ -106,6 +116,16 @@ public class AdaptiveAntiCheeseGoal extends Goal {
             return true;
         }
         return false;
+    }
+
+    private boolean isInTrapVehicle() {
+        Entity vehicle = mob.getVehicle();
+        return vehicle instanceof Boat || vehicle instanceof AbstractMinecart;
+    }
+
+    private boolean isNearTrapVehicle() {
+        Entity trapVehicle = nearestTrapVehicle();
+        return trapVehicle != null && mob.distanceToSqr(trapVehicle) < 2.9D;
     }
 
     private Entity nearestTrapVehicle() {
@@ -170,6 +190,7 @@ public class AdaptiveAntiCheeseGoal extends Goal {
                 zombie -> zombie != mob
                         && zombie.isAlive()
                         && !zombie.isVehicle()
+                        && !zombie.isPassenger()
                         && zombie.getTarget() == target
                         && Math.abs(zombie.getY() - mob.getY()) < 1.25D);
         Zombie bestCarrier = null;
