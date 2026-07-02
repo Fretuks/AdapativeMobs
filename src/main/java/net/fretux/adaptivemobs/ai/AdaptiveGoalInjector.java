@@ -102,7 +102,9 @@ public final class AdaptiveGoalInjector {
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 8.0D, 1.0D, true));
         } else if (pathfinder != null && mob instanceof Zombie && AMConfig.AI_ZOMBIE.get()) {
             mob.goalSelector.addGoal(3, new AdaptiveFlankGoal(pathfinder, tier, 2, 2.5D, 1.05D, true));
-            mob.goalSelector.addGoal(2, new AdaptiveZombiePackTacticsGoal((Zombie) mob, tier));
+            // Priority 1: must be able to interrupt the vanilla melee attack goal (priority 2),
+            // otherwise it can never take over while the zombie is already fighting.
+            mob.goalSelector.addGoal(1, new AdaptiveZombiePackTacticsGoal((Zombie) mob, tier));
         } else if (pathfinder != null && mob instanceof Creeper creeper && AMConfig.AI_CREEPER.get()) {
             mob.goalSelector.addGoal(2, new AdaptiveCreeperPressureGoal(creeper, tier));
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 3.0D, 1.0D, false));
@@ -159,8 +161,10 @@ public final class AdaptiveGoalInjector {
             mob.goalSelector.addGoal(3, new AdaptiveCreeperTacticsGoal(creeper, tier));
         }
         if (pathfinder != null && mob instanceof Spider && AMConfig.ENABLE_SPIDER_AI.get() && AMConfig.AI_SPIDER.get()) {
-            mob.goalSelector.addGoal(3, new AdaptiveSpiderTacticsGoal(pathfinder, tier, mob instanceof CaveSpider));
-            mob.goalSelector.addGoal(2, new AdaptiveSpiderDisengageGoal(pathfinder, tier, mob instanceof CaveSpider ? 3 : 4, 0.14D, 1.3D));
+            // Priority 2: below disengage (1, flee always wins) but still above the vanilla
+            // attack goal (3) so it can actually interrupt combat instead of being starved by it.
+            mob.goalSelector.addGoal(2, new AdaptiveSpiderTacticsGoal(pathfinder, tier, mob instanceof CaveSpider));
+            mob.goalSelector.addGoal(1, new AdaptiveSpiderDisengageGoal(pathfinder, tier, mob instanceof CaveSpider ? 3 : 4, 0.14D, 1.3D));
             mob.goalSelector.addGoal(5, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.38D, 1.15D));
         }
         if (mob instanceof Witch witch && AMConfig.ENABLE_WITCH_AI.get() && AMConfig.AI_WITCH.get()) {
