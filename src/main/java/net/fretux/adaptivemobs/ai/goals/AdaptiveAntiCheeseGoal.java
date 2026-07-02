@@ -45,13 +45,31 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         if (target == null || !target.isAlive()) {
             return false;
         }
-        if (isInTrapVehicle() || isNearTrapVehicle()) {
+        if (isInTrapVehicle() || isNearTrapVehicle() || nearestTrapBlock() != null) {
             return true;
         }
-        if (tierSupplier.getAsInt() >= 5 && mob instanceof Zombie && isVerticalObstacleCheese(target)) {
+        if (--cooldown > 0) {
+            return false;
+        }
+        if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
             return true;
         }
-        return --cooldown <= 0;
+        if ((mob instanceof AbstractSkeleton || mob instanceof Pillager) && !mob.hasLineOfSight(target)) {
+            return true;
+        }
+        if (mob instanceof Creeper creeper && target.hasLineOfSight(creeper)
+                && AdaptivePositioningUtils.isOpenToSky(mob)
+                && Math.sqrt(mob.distanceToSqr(target)) > 4.0D) {
+            return true;
+        }
+        if (mob instanceof EnderMan && (mob.level().getFluidState(mob.blockPosition()).is(FluidTags.WATER)
+                || target.level().getFluidState(target.blockPosition()).is(FluidTags.WATER))) {
+            return true;
+        }
+        // Nothing to correct right now; keep the cooldown short so we re-check soon instead of
+        // burning a long cooldown on a tick where no cheese pattern was actually detected.
+        cooldown = 10 + mob.getRandom().nextInt(15);
+        return false;
     }
 
     @Override
