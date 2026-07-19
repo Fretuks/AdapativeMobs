@@ -103,13 +103,13 @@ Several hostile families also have identity-specific pressure tools. These use v
 - Guardians - Focused Beam: tier 4+ guardian beam damage increases slightly when multiple guardians are already focused on the same player.
 - Elder guardians - Drowning Pressure: elder guardian beam hits add brief Slowness and a sinking pull.
 - Shulkers - Gravity Chain: tier 4+ shulker hits against an already levitating player extend Levitation and apply brief Slowness.
-- Slimes - Recombine: tier 5 small slimes gain short damage and jump pressure when they successfully hit, helping split slimes remain relevant.
-- Magma cubes - Molten Recombine: tier 5 small magma cubes use the same short damage and jump pressure as slimes, and briefly ignite the player on hit.
+- Slimes - Recombine: tier 5 equal-size Slimes that survive for 10-15 seconds seek one another within 12 blocks. On contact, one absorbs the other and doubles in size from 1 to 2 or from 2 to 4.
+- Magma cubes - Molten Recombine: tier 5 Magma Cubes use the same delayed merge behavior, but only combine with equal-size Magma Cubes and never mix with ordinary Slimes.
 - Piglins - Gold Frenzy: piglin-family Nether pressure is stronger at tier 5, while gold still remains valid counterplay rather than a hard immunity bypass.
 - Piglin brutes - Guard Break: tier 5 brute hits add a small armor-piercing damage component and briefly disable shields.
 - Hoglins - Gore Toss: tier 4+ hoglin hits can toss the player upward and backward on cooldown.
 - Zoglins - Frenzied Rampage: tier 5 low-health zoglins gain a short Speed and Resistance burst.
-- Ghasts - Splitting Fireball: treated as future work; current tier 5 ghasts already use stronger target prediction through airborne positioning and projectile aim adjustment.
+- Ghasts - Splitting Fireball: every tier 5 Ghast fireball launches two additional fireballs at shallow side angles while preserving the original center shot. Split projectiles are marked so they cannot recursively split again.
 - Blazes - Overheat Volley: tier 5 blazes that take ranged damage briefly gain Speed and Strength pressure to punish static bow farming.
 - Phantoms - Bleeding Dive: tier 5 phantom hits apply brief Hunger as a vanilla bleeding-style damage-over-time pressure.
 - Vexes - Phase Cut: tier 5 vexes that hit while phasing gain bonus hit pressure and apply brief Weakness.
@@ -363,6 +363,7 @@ AI changes:
 - Tier 2+ angled jump pressure instead of only direct movement.
 - Side positioning based on entity id so repeated slimes naturally spread.
 - Larger tier 5 slimes move and leap more aggressively.
+- Tier 5 equal-size Slimes become eligible to recombine after surviving for 10-15 seconds, seek a compatible partner within 12 blocks, and merge on contact. Two size-1 Slimes become size 2; two size-2 Slimes become size 4. Size-4 Slimes do not grow further.
 - Adaptive melee positioning.
 - Tier 4+ shared targeting.
 
@@ -376,6 +377,7 @@ Magma cubes receive shared scaling and spawn pressure through the generic hostil
 AI changes:
 
 - The same angled jump pressure as slimes, controlled by magma-cube advanced AI.
+- Tier 5 Magma Cubes use the same 10-15 second recombination cycle and 1→2→4 size progression, but only with other Magma Cubes of exactly the same size.
 - Adaptive melee positioning.
 - Nether biome tactics make them bolder in the Nether.
 - Tier 4+ shared targeting.
@@ -407,6 +409,7 @@ AI changes:
 - Airborne repositioning around targets.
 - Larger vertical offset than other airborne mobs.
 - Tier 5 target prediction for airborne positioning.
+- Tier 5 Splitting Fireball adds two shallow-angle side projectiles to each normal center fireball. The side shots retain the Ghast as owner and use its normal explosion power.
 - Nether biome tactics identify them as Nether mobs where applicable.
 - Tier 4+ shared targeting.
 

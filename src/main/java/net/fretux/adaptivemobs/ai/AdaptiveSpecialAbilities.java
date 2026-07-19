@@ -25,13 +25,12 @@ import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.Endermite;
 import net.minecraft.world.entity.monster.Evoker;
 import net.minecraft.world.entity.monster.Guardian;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.Pillager;
 import net.minecraft.world.entity.monster.Ravager;
 import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.monster.Silverfish;
-import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.monster.Spider;
 import net.minecraft.world.entity.monster.Stray;
 import net.minecraft.world.entity.monster.Vex;
@@ -44,6 +43,7 @@ import net.minecraft.world.entity.monster.piglin.PiglinBrute;
 import net.minecraft.world.entity.monster.warden.Warden;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.entity.projectile.LargeFireball;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ShulkerBullet;
 import net.minecraft.world.entity.player.Player;
@@ -60,6 +60,7 @@ import java.util.List;
 public final class AdaptiveSpecialAbilities {
 
     private static final String COOLDOWN_PREFIX = "am_special_cd_";
+    private static final String SPLIT_FIREBALL_KEY = "am_split_fireball";
     private static final List<TemporaryBlock> TEMPORARY_BLOCKS = new ArrayList<>();
     private static final List<DelayedReappear> DELAYED_REAPPEARS = new ArrayList<>();
 
@@ -75,6 +76,10 @@ public final class AdaptiveSpecialAbilities {
             return;
         }
         int tier = tier(level, mob);
+        if (tier >= 5 && mob instanceof Ghast ghast && projectile instanceof LargeFireball fireball) {
+            splitGhastFireball(level, ghast, fireball);
+            return;
+        }
         if (tier < 4 || !(projectile instanceof Arrow arrow)) {
             return;
         }
@@ -267,13 +272,6 @@ public final class AdaptiveSpecialAbilities {
             player.addEffect(new MobEffectInstance(MobEffects.LEVITATION, 80, 0));
             player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 50, 0));
         }
-        if ((mob instanceof Slime || mob instanceof MagmaCube) && tier >= 5 && mob.getBbWidth() <= 1.5F) {
-            mob.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 80, 0));
-            mob.addEffect(new MobEffectInstance(MobEffects.JUMP, 80, 1));
-            if (mob instanceof MagmaCube) {
-                player.setSecondsOnFire(2);
-            }
-        }
         if (mob instanceof Phantom && tier >= 5) {
             player.addEffect(new MobEffectInstance(MobEffects.HUNGER, 100, 0));
         }
@@ -336,6 +334,37 @@ public final class AdaptiveSpecialAbilities {
 
     private static boolean eventWasRanged(Entity directEntity) {
         return directEntity instanceof Projectile;
+    }
+
+    private static void splitGhastFireball(ServerLevel level, Ghast ghast, LargeFireball original) {
+        if (original.getPersistentData().getBoolean(SPLIT_FIREBALL_KEY)) {
+            return;
+        }
+        Vec3 direction = original.getDeltaMovement();
+        if (direction.lengthSqr() < 1.0E-4D && AdaptiveAIGoalUtils.isValidAdaptiveTarget(ghast.getTarget())) {
+            direction = ghast.getTarget().getEyePosition().subtract(original.position());
+        }
+        if (direction.lengthSqr() < 1.0E-4D) {
+            return;
+        }
+        direction = direction.normalize();
+        Vec3 side = new Vec3(-direction.z, 0.0D, direction.x);
+        if (side.lengthSqr() < 1.0E-4D) {
+            side = new Vec3(1.0D, 0.0D, 0.0D);
+        } else {
+            side = side.normalize();
+        }
+        spawnSplitFireball(level, ghast, original, direction.add(side.scale(0.18D)).normalize());
+        spawnSplitFireball(level, ghast, original, direction.subtract(side.scale(0.18D)).normalize());
+        AdaptiveAIGoalUtils.debug(ghast, () -> 5, "ghast splitting fireball");
+    }
+
+    private static void spawnSplitFireball(ServerLevel level, Ghast ghast, LargeFireball original, Vec3 direction) {
+        LargeFireball split = new LargeFireball(level, ghast, direction.x, direction.y, direction.z,
+                ghast.getExplosionPower());
+        split.getPersistentData().putBoolean(SPLIT_FIREBALL_KEY, true);
+        split.setPos(original.getX(), original.getY(), original.getZ());
+        level.addFreshEntity(split);
     }
 
     private record TemporaryBlock(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
