@@ -21,6 +21,7 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.living.MobSpawnEvent;
@@ -31,6 +32,11 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 public class AdaptiveMobsEvents {
+
+    private static final String FRIENDLY_FIRE_SOURCE_KEY = "am_friendly_fire_source";
+    private static final String FRIENDLY_FIRE_COUNT_KEY = "am_friendly_fire_count";
+    private static final String FRIENDLY_FIRE_EXPIRES_KEY = "am_friendly_fire_expires";
+    private static final int FRIENDLY_FIRE_WINDOW_TICKS = 100;
 
     @SubscribeEvent
     public void onCommands(RegisterCommandsEvent event) {
@@ -44,6 +50,37 @@ public class AdaptiveMobsEvents {
             return;
         }
         AdaptiveDifficultyManager.recordKill(player, killed);
+    }
+
+    @SubscribeEvent
+    public void onLivingAttack(LivingAttackEvent event) {
+        if (!AMConfig.enabled || !AMConfig.AI_ENABLED.get()
+                || !(event.getEntity() instanceof Mob victim) || !(victim instanceof Enemy)
+                || !(event.getSource().getDirectEntity() instanceof Projectile)
+                || !(event.getSource().getEntity() instanceof Mob attacker) || !(attacker instanceof Enemy)
+                || attacker == victim || !(victim.level() instanceof ServerLevel level)) {
+            return;
+        }
+        int tier = AdaptiveDifficultyManager.getMobTier(level, victim.getType());
+        if (tier < 2 || !AMConfig.isMobEnabled(victim.getType())) {
+            return;
+        }
+
+        long now = level.getGameTime();
+        String source = attacker.getUUID().toString();
+        boolean sameVolley = source.equals(victim.getPersistentData().getString(FRIENDLY_FIRE_SOURCE_KEY))
+                && victim.getPersistentData().getLong(FRIENDLY_FIRE_EXPIRES_KEY) >= now;
+        int hits = sameVolley ? victim.getPersistentData().getInt(FRIENDLY_FIRE_COUNT_KEY) + 1 : 1;
+        int toleratedHits = Math.min(4, tier - 1);
+        if (hits <= toleratedHits) {
+            victim.getPersistentData().putString(FRIENDLY_FIRE_SOURCE_KEY, source);
+            victim.getPersistentData().putInt(FRIENDLY_FIRE_COUNT_KEY, hits);
+            victim.getPersistentData().putLong(FRIENDLY_FIRE_EXPIRES_KEY, now + FRIENDLY_FIRE_WINDOW_TICKS);
+            event.setCanceled(true);
+            AdaptiveAIGoalUtils.debug(victim, () -> tier, "ignored allied projectile hit");
+            return;
+        }
+        clearFriendlyFireTolerance(victim);
     }
 
     @SubscribeEvent
@@ -132,5 +169,11 @@ public class AdaptiveMobsEvents {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         AdaptiveSpecialAbilities.onServerTick(event);
+    }
+
+    private static void clearFriendlyFireTolerance(Mob mob) {
+        mob.getPersistentData().remove(FRIENDLY_FIRE_SOURCE_KEY);
+        mob.getPersistentData().remove(FRIENDLY_FIRE_COUNT_KEY);
+        mob.getPersistentData().remove(FRIENDLY_FIRE_EXPIRES_KEY);
     }
 }

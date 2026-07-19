@@ -46,6 +46,8 @@ Tier 5 spawn pressure is intentionally more noticeable than earlier tiers. The l
 
 Several adaptive AI systems can apply across many mobs:
 
+- Valid target enforcement: adaptive goals, remembered threats, shared targets, sound reactions, projectile adjustments, and special abilities ignore creative and spectator players. A priority target-sanitizer goal clears invalid targets promptly, and adaptive zombie stacks dismount when their target is no longer valid or the vertical obstacle is gone.
+- Friendly-fire discipline: tier 2-5 hostile mobs ignore the first 1-4 accidental projectile hits respectively from the same hostile mob within a five-second window. Ignored hits deal no damage and do not trigger vanilla retaliation, so one Skeleton arrow no longer makes a higher-tier Zombie immediately attack the Skeleton. Sustained allied fire beyond the tier's tolerance still permits normal damage and retaliation.
 - Shared targets: tier 4+ mobs can help nearby hostile allies focus a target. This does not create a permanent pack brain; it is a short-range goal that encourages nearby mobs to converge on a player already being pressured.
 - Target priority: tier 3+ mobs can occasionally switch to a better target instead of blindly keeping the first target they saw. A player scores as more attractive if they are low health, eating, drawing or using a ranged weapon, lightly armored, already committed to attacking another mob, or exposed to skeleton fire without a shield.
 - Threat memory: mobs can briefly remember the player who damaged them. This helps prevent trivial line-of-sight resets where a player hits a mob, steps behind a corner, and immediately drops all pressure.
@@ -53,9 +55,11 @@ Several adaptive AI systems can apply across many mobs:
 - Morale: tier 3+ mobs compare nearby hostile allies to nearby non-creative, non-spectator players. If hostile allies outnumber players, they can move into darker or side-pressure positions more confidently. If a mob is isolated and below 35% health, it can briefly move defensively instead.
 - Support: tier 3+ mobs can react to nearby allies. Melee mobs can move toward a player who is attacking a ranged ally such as a skeleton, pillager, or witch. Ranged mobs can step back when multiple melee allies are already attacking the same target, which helps avoid crowding.
 - Escape denial: tier 3+ zombies and spiders can move toward where the player is looking, roughly three blocks ahead of the player, to pressure likely exits. If that position is not usable ground, they fall back to a nearby darker side position. This is intentionally imperfect and does not pathfind to every possible escape route.
-- Anti-cheese behavior: tier 3+ selected mobs react to common static tactics that often trivialize vanilla mobs. "Cheese" here means repeatable low-risk setups such as pillaring above zombies, shooting skeletons through tiny blocked angles, baiting creepers across open visible ground, or standing in/near water to neutralize endermen. The mod does not break blocks or hard-counter the player; it nudges movement or target behavior:
-  - Hostile pathfinder mobs avoid nearby trap vehicles such as boats and minecarts, dismount if caught in one, and step away from nearby trap blocks such as cobwebs, powder snow, and sweet berry bushes.
-  - Zombies under a pillared player gather near the player instead of wandering away, and can stack onto nearby zombies to climb toward pillared players or get over simple wall setups.
+- Anti-cheese behavior: tier 3+ selected mobs react to common static tactics that often trivialize vanilla mobs. "Cheese" here means repeatable low-risk setups such as pillaring above zombies, shooting skeletons through tiny blocked angles, baiting creepers across open visible ground, or standing in/near water to neutralize endermen. The mod does not indiscriminately alter terrain or hard-counter the player; block interaction is limited to recognized trap blocks and Enderman ramp scaffolds:
+  - Hostile pathfinder mobs break nearby trap vehicles such as boats and minecarts, dismount if caught in one, and can move to free a nearby trapped hostile ally. The appropriate boat or minecart item is dropped when a vehicle is broken.
+  - Hostile pathfinder mobs break nearby cobwebs, powder snow, and sweet berry bushes while escaping, with suitable drops for cobwebs and berry bushes. Spiders retain their natural immunity to cobweb trapping and do not break cobwebs.
+  - Zombies under a pillared player gather near the player instead of wandering away, and can stack onto nearby zombies to climb toward pillared players or get over simple wall setups. The response now remains active for a short pressure window rather than performing only one movement check.
+  - Creepers independently avoid boats, minecarts, cobwebs, powder snow, and sweet berry bushes along their approach path so their higher-priority pressure goal does not walk them into obvious traps.
   - Skeletons and pillagers with blocked line of sight reposition to a side or darker angle instead of staring at a wall.
   - Creepers in open ground with the player watching them stop swelling and try a side approach rather than walking straight forward. Creepers also cancel swelling against an actively blocking shield and try to move around the shield instead.
 - Endermen near water, or fighting a player in water, retreat to safer ground.
@@ -86,7 +90,7 @@ Several hostile families also have identity-specific pressure tools. These use v
 - Strays - Frostbite Shot: tier 4+ stray arrows apply a stronger Slowness pulse, with occasional Mining Fatigue at tier 5.
 - Wither skeletons - Execution Swing: tier 4+ wither skeletons refresh Wither and add extra shove pressure when hitting a target below 40% health.
 - Creepers - Blink Shroud: tier 5 creepers near detonation range can briefly turn invisible for about half a second before pressure resumes. A primed creeper sound plays as the cue.
-- Spiders - Web Retreat: tier 4+ spiders can place a temporary cobweb at or near the player after taking damage or landing a hit. The cobweb decays after roughly 5-8 seconds.
+- Spiders - Web Retreat: tier 4+ spiders can place a temporary cobweb at or near the player after taking damage or landing a hit. The cobweb decays after roughly 5-8 seconds. Web placement now has a substantially longer per-spider cooldown, preventing repeated web spam.
 - Cave spiders - Venom Pounce: cave spiders keep their lunge behavior against ranged/eating players and refresh short Poison on hits against players using bows, crossbows, or items.
 - Witches - Brewed Combo: witches already support allies with regeneration and punish rushes with Slowness, Weakness, or Harming. At tier 5 these potion opportunities happen earlier and make witches priority targets.
 - Pillagers - Pinning Bolt: tier 5 pillager arrows can carry a short pinned effect: Slowness and a one-second shield disable on hit.
@@ -125,6 +129,8 @@ AI changes:
 - Escape-denial movement toward the direction the player appears to be moving or looking, so zombies sometimes pressure an exit instead of trailing directly behind.
 - Anti-cheese movement against pillared players: if the player is more than 2.5 blocks above the zombie and still nearby horizontally, the zombie moves toward a close side position under or around the pillar.
 - Zombies can stack by riding nearby zombies when a player is above them on a pillar or behind a simple vertical obstacle. This gives groups a way to build pressure upward without breaking blocks.
+- Stacked zombies coordinate through the bottom carrier, push upward and toward the target as a corpse ladder, and dismount near attack height. They automatically unstack when the target moves away, descends, becomes invalid, or the obstacle no longer requires a stack.
+- The same vertical-pressure response recognizes nearby simple walls as well as player-built pillars. Zombies gather and hop against the obstacle when no suitable carrier is available.
 - Tier 4+ shared targeting with nearby hostile mobs.
 
 Zombified piglins also count as zombies for gear and participation, but Nether-family melee AI settings affect some piglin-family movement behavior elsewhere.
@@ -157,12 +163,15 @@ Creepers receive shared scaling and spawn pressure.
 
 AI changes:
 
+- Fuse duration decreases with tier: 30 ticks at tier 1, then 27, 24, 21, and 18 ticks at tiers 2-5 respectively.
 - Tier 2+ creepers cancel premature swelling if they are still too far away.
 - Tier 3+ creepers use pressure logic around when to start swelling.
 - Tier 4+ creepers can commit when another nearby attacker is already pressuring the target.
 - Tier 5 creepers can briefly retreat and re-engage instead of always walking directly forward.
 - Anti-cheese behavior can make open-ground approaches less predictable: if a creeper is visible to the target, under open sky, and still more than 4 blocks away, it cancels swelling and tries to reposition sideways.
 - Creepers do not intentionally explode into an actively blocking shield. They cancel swelling at close range and path to a side angle before trying to pressure again.
+- Creepers periodically verify that the target is actually reachable. If no complete path exists, they cancel swelling and keep deliberate spacing instead of charging or priming uselessly.
+- Creepers detect nearby trap vehicles and trap blocks, including hazards directly ahead of their approach, and move away before resuming pressure.
 - Tier 4+ shared targeting applies.
 
 ## Spiders and Cave Spiders
@@ -177,6 +186,7 @@ AI changes:
 - Flanking with close-range side pressure.
 - Tier 2+ cave spiders and tier 3+ spiders use tactical side movement.
 - Tier 3+ spiders can lunge at nearby players using ranged weapons.
+- Tier 3+ spiders actively climb toward pillared targets for a sustained window. They move to the pillar face and add upward movement while against it; cave spiders climb slightly faster and maintain the attempt longer.
 - Tier 4+ spiders prefer elevated positions when practical.
 - Cave or underground spiders can use vertical terrain pressure.
 - Retreat and re-engage behavior after damage. When spiders disengage, they gain invisibility and regeneration 5 for 5 seconds while repositioning before re-engaging.
@@ -234,6 +244,8 @@ AI changes:
 - Water-aware teleporting away from unsafe positions.
 - Tier 5 wider side repositioning against close melee pressure.
 - In the End, tier 4+ endermen can coordinate nearby endermen onto the same target, with wider coordination and more teleport attempts at tier 5.
+- Tier 4+ endermen answer nearby towered players by constructing a supported diagonal ramp from vanilla solid blocks. They place steps every 4-7 ticks, keep a stable ramp plan while climbing, and teleport onto each new step so they do not wait exposed beneath the tower.
+- Endermen preserve a useful carried solid block for the ramp. An unsuitable carried block is safely placed nearby when possible, or dropped before a scaffold block is selected.
 - Anti-cheese response for water traps: if the enderman or target is in water, the enderman tries to retreat to a safer position instead of staying in a bad spot.
 - Tier 4+ shared targeting.
 
