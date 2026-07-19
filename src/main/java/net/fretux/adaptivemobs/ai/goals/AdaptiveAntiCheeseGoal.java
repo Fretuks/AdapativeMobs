@@ -49,24 +49,16 @@ public class AdaptiveAntiCheeseGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (!AMConfig.ENABLE_ANTI_CHEESE_AI.get()) {
+        if (!AMConfig.AI_ENABLED.get() || !AMConfig.ENABLE_ADVANCED_AI.get()
+                || !AMConfig.ENABLE_ANTI_CHEESE_AI.get() || tierSupplier.getAsInt() < 3) {
             return false;
         }
         LivingEntity target = mob.getTarget();
-        if (isInTrapVehicle() || isTooCloseToTrapVehicle() || nearestTrapBlock() != null) {
-            return true;
-        }
-        if (trappedAllyVehicle() != null) {
-            return true;
-        }
-        if (mob instanceof Zombie && mob.isPassenger() && shouldUnstack(target)) {
-            return true;
-        }
-        if (tierSupplier.getAsInt() < 3) {
-            return false;
-        }
         if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return false;
+        }
+        if (isInTrapVehicle() || nearestTrapBlock() != null || trappedAllyVehicle() != null) {
+            return true;
         }
         if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
             return true;
@@ -141,13 +133,8 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         Entity vehicle = mob.getVehicle();
         if (vehicle instanceof Boat || vehicle instanceof AbstractMinecart) {
             mob.getNavigation().stop();
-            tryDestroyTrapVehicle(vehicle);
+            mob.stopRiding();
             moveAwayFrom(vehicle.position(), 1.15D, "trap vehicle escape");
-            return true;
-        }
-        Entity trapVehicle = nearestTrapVehicle();
-        if (trapVehicle != null && mob.distanceToSqr(trapVehicle) < TRAP_VEHICLE_BREAK_DISTANCE_SQR) {
-            tryDestroyTrapVehicle(trapVehicle);
             return true;
         }
         BlockPos trapBlock = nearestTrapBlock();
@@ -162,26 +149,6 @@ public class AdaptiveAntiCheeseGoal extends Goal {
     private boolean isInTrapVehicle() {
         Entity vehicle = mob.getVehicle();
         return vehicle instanceof Boat || vehicle instanceof AbstractMinecart;
-    }
-
-    private boolean isTooCloseToTrapVehicle() {
-        Entity trapVehicle = nearestTrapVehicle();
-        return trapVehicle != null && mob.distanceToSqr(trapVehicle) < TRAP_VEHICLE_BREAK_DISTANCE_SQR;
-    }
-
-    private Entity nearestTrapVehicle() {
-        List<Entity> vehicles = mob.level().getEntitiesOfClass(Entity.class, mob.getBoundingBox().inflate(3.5D),
-                entity -> entity instanceof Boat || entity instanceof AbstractMinecart);
-        Entity nearest = null;
-        double best = Double.MAX_VALUE;
-        for (Entity entity : vehicles) {
-            double dist = mob.distanceToSqr(entity);
-            if (dist < best) {
-                best = dist;
-                nearest = entity;
-            }
-        }
-        return nearest;
     }
 
     private Entity trappedAllyVehicle() {
@@ -245,40 +212,13 @@ public class AdaptiveAntiCheeseGoal extends Goal {
             AdaptiveAIGoalUtils.debug(mob, tierSupplier, "moving to break ally trap vehicle");
             return true;
         }
-        mob.swing(mob.getUsedItemHand());
-        dropTrapVehicleItem(vehicle);
-        vehicle.ejectPassengers();
-        vehicle.discard();
-        AdaptiveAIGoalUtils.debug(mob, tierSupplier, "breaking ally trap vehicle");
+        for (Entity passenger : List.copyOf(vehicle.getPassengers())) {
+            if (passenger instanceof Mob trapped && trapped instanceof Enemy) {
+                trapped.stopRiding();
+            }
+        }
+        AdaptiveAIGoalUtils.debug(mob, tierSupplier, "freeing ally from trap vehicle");
         return true;
-    }
-
-    private void dropTrapVehicleItem(Entity vehicle) {
-        Item drop = null;
-        if (vehicle instanceof Boat boat) {
-            drop = boatDrop(boat);
-        } else if (vehicle instanceof AbstractMinecart) {
-            drop = Items.MINECART;
-        }
-        if (drop != null) {
-            vehicle.spawnAtLocation(drop);
-        }
-    }
-
-    private Item boatDrop(Boat boat) {
-        boolean chest = boat instanceof ChestBoat;
-        return switch (boat.getVariant()) {
-            case OAK -> chest ? Items.OAK_CHEST_BOAT : Items.OAK_BOAT;
-            case SPRUCE -> chest ? Items.SPRUCE_CHEST_BOAT : Items.SPRUCE_BOAT;
-            case BIRCH -> chest ? Items.BIRCH_CHEST_BOAT : Items.BIRCH_BOAT;
-            case JUNGLE -> chest ? Items.JUNGLE_CHEST_BOAT : Items.JUNGLE_BOAT;
-            case ACACIA -> chest ? Items.ACACIA_CHEST_BOAT : Items.ACACIA_BOAT;
-            case DARK_OAK -> chest ? Items.DARK_OAK_CHEST_BOAT : Items.DARK_OAK_BOAT;
-            case MANGROVE -> chest ? Items.MANGROVE_CHEST_BOAT : Items.MANGROVE_BOAT;
-            case CHERRY -> chest ? Items.CHERRY_CHEST_BOAT : Items.CHERRY_BOAT;
-            case BAMBOO -> chest ? Items.BAMBOO_CHEST_RAFT : Items.BAMBOO_RAFT;
-            default -> chest ? Items.OAK_CHEST_BOAT : Items.OAK_BOAT;
-        };
     }
 
     private BlockPos nearestTrapBlock() {
@@ -315,6 +255,9 @@ public class AdaptiveAntiCheeseGoal extends Goal {
             return;
         }
         if (mob instanceof Spider && state.is(Blocks.COBWEB)) {
+            return;
+        }
+        if (mob instanceof Zombie && !AMConfig.ALLOW_ZOMBIE_BLOCK_BREAK.get()) {
             return;
         }
         if (state.is(Blocks.COBWEB)) {

@@ -56,6 +56,7 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.UUID;
 
 public final class AdaptiveSpecialAbilities {
 
@@ -68,7 +69,7 @@ public final class AdaptiveSpecialAbilities {
     }
 
     public static void onProjectileJoin(EntityJoinLevelEvent event) {
-        if (!AMConfig.enabled || !(event.getLevel() instanceof ServerLevel level)) {
+        if (!adaptiveAbilitiesEnabled() || !(event.getLevel() instanceof ServerLevel level)) {
             return;
         }
         Entity entity = event.getEntity();
@@ -112,7 +113,7 @@ public final class AdaptiveSpecialAbilities {
     }
 
     public static void onLivingHurt(LivingHurtEvent event) {
-        if (!AMConfig.enabled || !(event.getEntity().level() instanceof ServerLevel level)) {
+        if (!adaptiveAbilitiesEnabled() || !(event.getEntity().level() instanceof ServerLevel level)) {
             return;
         }
         LivingEntity victim = event.getEntity();
@@ -138,7 +139,7 @@ public final class AdaptiveSpecialAbilities {
             if (now < block.expireTick) {
                 continue;
             }
-            ServerLevel level = event.getServer().getLevel(block.dimension);
+            ServerLevel level = block.server == event.getServer() ? event.getServer().getLevel(block.dimension) : null;
             if (level != null && level.getBlockState(block.pos).is(Blocks.COBWEB)) {
                 level.removeBlock(block.pos, false);
             }
@@ -151,15 +152,22 @@ public final class AdaptiveSpecialAbilities {
             if (now < pending.tick) {
                 continue;
             }
-            ServerLevel level = event.getServer().getLevel(pending.dimension);
-            if (level != null && pending.mob.isAlive() && AdaptiveAIGoalUtils.isValidAdaptiveTarget(pending.target)
-                    && pending.mob.canAttack(pending.target)) {
-                Vec3 side = AdaptivePositioningUtils.sidePosition(pending.mob, pending.target, 1.6D,
-                        pending.mob.getRandom().nextBoolean() ? 1.0D : -1.0D, 0.0D);
-                pending.mob.moveTo(side.x, side.y, side.z, pending.mob.getYRot(), pending.mob.getXRot());
-                pending.mob.removeEffect(MobEffects.INVISIBILITY);
-                pending.mob.setTarget(pending.target);
-                AdaptiveAIGoalUtils.debug(pending.mob, () -> pending.tier, "silverfish burrow burst");
+            ServerLevel level = pending.server == event.getServer() ? event.getServer().getLevel(pending.dimension) : null;
+            Entity mobEntity = level == null ? null : level.getEntity(pending.mobId);
+            Entity targetEntity = level == null ? null : level.getEntity(pending.targetId);
+            if (mobEntity instanceof Silverfish mob && targetEntity instanceof LivingEntity target
+                    && mob.isAlive() && AdaptiveAIGoalUtils.isValidAdaptiveTarget(target) && mob.canAttack(target)) {
+                Vec3 side = AdaptivePositioningUtils.sidePosition(mob, target, 1.6D,
+                        mob.getRandom().nextBoolean() ? 1.0D : -1.0D, 0.0D);
+                BlockPos destination = BlockPos.containing(side);
+                Vec3 delta = side.subtract(mob.position());
+                if (level.hasChunkAt(destination) && level.getWorldBorder().isWithinBounds(destination)
+                        && level.noCollision(mob, mob.getBoundingBox().move(delta))) {
+                    mob.moveTo(side.x, side.y, side.z, mob.getYRot(), mob.getXRot());
+                    mob.setTarget(target);
+                    AdaptiveAIGoalUtils.debug(mob, () -> pending.tier, "silverfish burrow burst");
+                }
+                mob.removeEffect(MobEffects.INVISIBILITY);
             }
             reappearIterator.remove();
         }
@@ -193,7 +201,8 @@ public final class AdaptiveSpecialAbilities {
                 && ready(mob, "burrow_burst", 220)) {
             silverfish.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 35, 0));
             silverfish.getNavigation().stop();
-            DELAYED_REAPPEARS.add(new DelayedReappear(level.dimension(), level.getGameTime() + 24, silverfish, attacker, tier));
+            DELAYED_REAPPEARS.add(new DelayedReappear(level.getServer(), level.dimension(), level.getGameTime() + 24,
+                    silverfish.getUUID(), attacker.getUUID(), tier));
             AdaptiveAIGoalUtils.debug(mob, () -> tier, "silverfish burrow vanish");
         }
         if (tier >= 4 && mob instanceof Evoker evoker && ready(mob, "vex_relay", 120)) {
@@ -293,7 +302,7 @@ public final class AdaptiveSpecialAbilities {
     }
 
     private static int tier(ServerLevel level, Mob mob) {
-        if (!AMConfig.isMobEnabled(mob.getType())) {
+        if (!adaptiveAbilitiesEnabled() || !AdaptiveGoalInjector.isAIEnabledFor(mob)) {
             return 0;
         }
         return AdaptiveDifficultyManager.getMobTier(level, mob.getType());
@@ -328,7 +337,7 @@ public final class AdaptiveSpecialAbilities {
             return;
         }
         level.setBlock(pos, Blocks.COBWEB.defaultBlockState(), 3);
-        TEMPORARY_BLOCKS.add(new TemporaryBlock(level.dimension(), pos.immutable(), expireTick));
+        TEMPORARY_BLOCKS.add(new TemporaryBlock(level.getServer(), level.dimension(), pos.immutable(), expireTick));
         level.playSound(null, pos, SoundEvents.SPIDER_AMBIENT, SoundSource.HOSTILE, 0.6F, 1.25F);
     }
 
@@ -367,11 +376,32 @@ public final class AdaptiveSpecialAbilities {
         level.addFreshEntity(split);
     }
 
-    private record TemporaryBlock(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+    public static void invalidateTemporaryBlock(ServerLevel level, BlockPos pos) {
+        TEMPORARY_BLOCKS.removeIf(block -> block.server == level.getServer()
+                && block.dimension == level.dimension() && block.pos.equals(pos));
+    }
+
+    public static void clear(ServerLevel level) {
+        TEMPORARY_BLOCKS.removeIf(block -> block.server == level.getServer() && block.dimension == level.dimension());
+        DELAYED_REAPPEARS.removeIf(pending -> pending.server == level.getServer() && pending.dimension == level.dimension());
+    }
+
+    public static void clear(net.minecraft.server.MinecraftServer server) {
+        TEMPORARY_BLOCKS.removeIf(block -> block.server == server);
+        DELAYED_REAPPEARS.removeIf(pending -> pending.server == server);
+    }
+
+    private static boolean adaptiveAbilitiesEnabled() {
+        return AMConfig.enabled && AMConfig.AI_ENABLED.get() && AMConfig.ENABLE_ADVANCED_AI.get();
+    }
+
+    private record TemporaryBlock(net.minecraft.server.MinecraftServer server,
+                                  net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
                                   BlockPos pos, long expireTick) {
     }
 
-    private record DelayedReappear(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
-                                   long tick, Silverfish mob, LivingEntity target, int tier) {
+    private record DelayedReappear(net.minecraft.server.MinecraftServer server,
+                                   net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+                                   long tick, UUID mobId, UUID targetId, int tier) {
     }
 }

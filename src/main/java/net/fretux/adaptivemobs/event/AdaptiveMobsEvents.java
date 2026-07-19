@@ -28,7 +28,9 @@ import net.minecraftforge.event.entity.living.MobSpawnEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 public class AdaptiveMobsEvents {
@@ -97,6 +99,9 @@ public class AdaptiveMobsEvents {
 
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getLevel() instanceof ServerLevel level) {
+            AdaptiveSpecialAbilities.invalidateTemporaryBlock(level, event.getPos());
+        }
         if (AMConfig.enabled && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()
                 && event.getLevel() instanceof ServerLevel level) {
             if (event.getPlayer() instanceof ServerPlayer player
@@ -104,6 +109,13 @@ public class AdaptiveMobsEvents {
                 return;
             }
             AdaptiveMemory.rememberSound(level, event.getPos(), AdaptiveMemory.SoundKind.BLOCK_BREAK, 20 * 8);
+        }
+    }
+
+    @SubscribeEvent
+    public void onBlockPlace(EntityPlaceEvent event) {
+        if (event.getLevel() instanceof ServerLevel level) {
+            AdaptiveSpecialAbilities.invalidateTemporaryBlock(level, event.getPos());
         }
     }
 
@@ -155,6 +167,7 @@ public class AdaptiveMobsEvents {
     public void onLevelUnload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
             AdaptiveMemory.clear(level);
+            AdaptiveSpecialAbilities.clear(level);
         }
     }
 
@@ -169,6 +182,11 @@ public class AdaptiveMobsEvents {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         AdaptiveSpecialAbilities.onServerTick(event);
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        AdaptiveSpecialAbilities.clear(event.getServer());
     }
 
     private static void clearFriendlyFireTolerance(Mob mob) {

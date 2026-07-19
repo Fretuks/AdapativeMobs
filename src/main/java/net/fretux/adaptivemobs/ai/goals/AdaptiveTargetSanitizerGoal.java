@@ -1,6 +1,7 @@
 package net.fretux.adaptivemobs.ai.goals;
 
 import net.fretux.adaptivemobs.ai.AdaptiveAIGoalUtils;
+import net.fretux.adaptivemobs.ai.AdaptiveGoalInjector;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -20,6 +21,9 @@ public class AdaptiveTargetSanitizerGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (!AdaptiveGoalInjector.isAIEnabledFor(mob)) {
+            return false;
+        }
         LivingEntity target = mob.getTarget();
         return (target != null && !AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) || shouldReleaseZombieStack(target);
     }

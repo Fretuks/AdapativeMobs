@@ -115,6 +115,7 @@ public final class GearScaler {
         if (tier >= 5 && random.nextDouble() < 0.22D) {
             bow.enchant(Enchantments.FLAMING_ARROWS, 1);
         }
+        skeleton.setDropChance(EquipmentSlot.MAINHAND, 0.0F);
     }
 
     private static void upgradeCrossbow(Pillager pillager, int tier, RandomSource random) {
@@ -130,6 +131,7 @@ public final class GearScaler {
         } else if (tier >= 5 && random.nextDouble() < 0.35D) {
             crossbow.enchant(Enchantments.PIERCING, 2);
         }
+        pillager.setDropChance(EquipmentSlot.MAINHAND, 0.0F);
     }
 
     // --- Helpers -----------------------------------------------------------

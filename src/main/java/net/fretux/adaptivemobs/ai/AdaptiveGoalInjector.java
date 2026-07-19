@@ -85,19 +85,19 @@ public final class AdaptiveGoalInjector {
     }
 
     public static void inject(Mob mob, ServerLevel level, int initialTier) {
-        if (!AMConfig.AI_ENABLED.get() || initialTier <= 0 || isBoss(mob)) {
+        if (isBoss(mob)) {
             return;
         }
         if (!INJECTED.add(mob)) {
             return;
         }
         PathfinderMob pathfinder = mob instanceof PathfinderMob pf ? pf : null;
-        IntSupplier tier = () -> AdaptiveDifficultyManager.getMobTier(level, mob.getType());
+        IntSupplier tier = () -> isAIEnabledFor(mob)
+                ? AdaptiveDifficultyManager.getMobTier(level, mob.getType()) : 0;
+        IntSupplier advancedTier = () -> AMConfig.ENABLE_ADVANCED_AI.get() ? tier.getAsInt() : 0;
         mob.targetSelector.addGoal(0, new AdaptiveTargetSanitizerGoal(mob));
 
-        if (tier.getAsInt() >= 4) {
-            mob.targetSelector.addGoal(2, new AdaptiveSharedTargetGoal(mob, tier, 4, 12.0D));
-        }
+        mob.targetSelector.addGoal(2, new AdaptiveSharedTargetGoal(mob, tier, 4, 12.0D));
 
         if (pathfinder != null && mob instanceof AbstractSkeleton && AMConfig.AI_SKELETON.get()) {
             mob.goalSelector.addGoal(3, new AdaptiveSkeletonShieldGoal(pathfinder, tier));
@@ -118,10 +118,10 @@ public final class AdaptiveGoalInjector {
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 7.0D, 1.0D, false));
         }
 
-        if (AMConfig.ENABLE_ADVANCED_AI.get()) {
-            injectAdvanced(mob, pathfinder, tier);
-            AdaptiveAIGoalUtils.debug(mob, tier, "injected adaptive goals");
-        }
+        // Install advanced goals even while disabled. Their tier supplier returns zero until the
+        // switches are enabled, allowing config reloads to affect already-loaded mobs both ways.
+        injectAdvanced(mob, pathfinder, advancedTier);
+        AdaptiveAIGoalUtils.debug(mob, tier, "injected adaptive goals");
     }
 
     private static void injectAdvanced(Mob mob, PathfinderMob pathfinder, IntSupplier tier) {
@@ -308,6 +308,32 @@ public final class AdaptiveGoalInjector {
             return 0.9D;
         }
         return 1.05D;
+    }
+
+    public static boolean isAIEnabledFor(Mob mob) {
+        if (!AMConfig.enabled || !AMConfig.AI_ENABLED.get() || !AMConfig.isMobEnabled(mob.getType())) {
+            return false;
+        }
+        if (mob instanceof AbstractSkeleton) return AMConfig.AI_SKELETON.get();
+        if (mob instanceof Zombie) return AMConfig.AI_ZOMBIE.get();
+        if (mob instanceof Creeper) return AMConfig.AI_CREEPER.get();
+        if (mob instanceof Spider) return AMConfig.AI_SPIDER.get();
+        if (mob instanceof Witch) return AMConfig.AI_WITCH.get();
+        if (mob instanceof Pillager) return AMConfig.AI_PILLAGER.get();
+        if (mob instanceof EnderMan) return AMConfig.AI_ENDERMAN.get();
+        if (mob instanceof Ghast) return AMConfig.AI_GHAST.get();
+        if (mob instanceof Blaze) return AMConfig.AI_BLAZE.get();
+        if (mob instanceof Guardian) return AMConfig.AI_GUARDIAN.get();
+        if (mob instanceof Phantom) return AMConfig.AI_PHANTOM.get();
+        if (mob instanceof Ravager) return AMConfig.AI_RAVAGER.get();
+        if (mob instanceof Evoker) return AMConfig.AI_EVOKER.get();
+        if (mob instanceof Vex) return AMConfig.AI_VEX.get();
+        if (mob instanceof Piglin || mob instanceof Hoglin || mob instanceof Zoglin) return AMConfig.AI_PIGLIN_FAMILY.get();
+        if (mob instanceof Silverfish || mob instanceof Endermite) return AMConfig.AI_SMALL_SWARM.get();
+        if (mob instanceof Shulker) return AMConfig.AI_SHULKER.get();
+        if (mob instanceof Warden) return AMConfig.AI_WARDEN.get();
+        if (mob instanceof Slime) return AMConfig.AI_SLIME.get();
+        return true;
     }
 
     private static int creeperFuseTicks(int tier) {

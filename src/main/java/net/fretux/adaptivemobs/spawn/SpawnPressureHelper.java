@@ -10,7 +10,6 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -66,8 +65,8 @@ public final class SpawnPressureHelper {
             for (int attempt = 0; attempt < 6; attempt++) {
                 double dx = (random.nextDouble() - 0.5) * radius;
                 double dz = (random.nextDouble() - 0.5) * radius;
-                BlockPos spawnPos = surfaceSpawnPos(level, original.getX() + dx, original.getZ() + dz);
-                if (!level.getWorldBorder().isWithinBounds(spawnPos)) {
+                BlockPos spawnPos = nearbySpawnPos(original, original.getX() + dx, original.getZ() + dz, random);
+                if (!level.hasChunkAt(spawnPos) || !level.getWorldBorder().isWithinBounds(spawnPos)) {
                     continue;
                 }
                 extra.moveTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D,
@@ -93,10 +92,12 @@ public final class SpawnPressureHelper {
         }
     }
 
-    private static BlockPos surfaceSpawnPos(ServerLevel level, double x, double z) {
+    private static BlockPos nearbySpawnPos(Mob original, double x, double z, RandomSource random) {
         int blockX = BlockPos.containing(x, 0.0D, z).getX();
         int blockZ = BlockPos.containing(x, 0.0D, z).getZ();
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
+        // Stay in the original mob's vertical habitat. Spawn rules and collision checks below
+        // decide whether a candidate suits ground, cave, aquatic, or airborne mobs.
+        int y = original.blockPosition().getY() + random.nextInt(9) - 4;
         return new BlockPos(blockX, y, blockZ);
     }
 }

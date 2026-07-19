@@ -11,11 +11,11 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.EnderMan;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.event.ForgeEventFactory;
 
 import java.util.EnumSet;
 import java.util.function.IntSupplier;
@@ -24,23 +24,6 @@ public class AdaptiveEndermanTacticsGoal extends Goal {
 
     private static final int ANTI_PILLAR_BUILD_COOLDOWN_MIN = 4;
     private static final int ANTI_PILLAR_BUILD_COOLDOWN_RANDOM = 4;
-    private static final BlockState[] OVERWORLD_SCAFFOLD_BLOCKS = {
-            Blocks.DIRT.defaultBlockState(),
-            Blocks.GRASS_BLOCK.defaultBlockState(),
-            Blocks.COARSE_DIRT.defaultBlockState(),
-            Blocks.ROOTED_DIRT.defaultBlockState(),
-            Blocks.GRAVEL.defaultBlockState(),
-            Blocks.SAND.defaultBlockState(),
-            Blocks.RED_SAND.defaultBlockState(),
-            Blocks.COBBLESTONE.defaultBlockState(),
-            Blocks.STONE.defaultBlockState()
-    };
-    private static final BlockState[] END_SCAFFOLD_BLOCKS = {
-            Blocks.END_STONE.defaultBlockState(),
-            Blocks.OBSIDIAN.defaultBlockState(),
-            Blocks.COBBLESTONE.defaultBlockState()
-    };
-
     private final EnderMan enderman;
     private final IntSupplier tierSupplier;
     private int cooldown;
@@ -57,7 +40,8 @@ public class AdaptiveEndermanTacticsGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return AMConfig.ENABLE_ENDERMAN_AI.get()
+        return AMConfig.AI_ENABLED.get() && AMConfig.ENABLE_ADVANCED_AI.get()
+                && AMConfig.AI_ENDERMAN.get() && AMConfig.ENABLE_ENDERMAN_AI.get()
                 && tierSupplier.getAsInt() >= 2
                 && AdaptiveAIGoalUtils.isValidAdaptiveTarget(enderman.getTarget())
                 && --cooldown <= 0;
@@ -118,8 +102,13 @@ public class AdaptiveEndermanTacticsGoal extends Goal {
         if (!(enderman.level() instanceof ServerLevel level)) {
             return false;
         }
-        BlockState scaffoldState = randomScaffoldState(inEnd);
-        prepareScaffoldBlock(level, scaffoldState);
+        if (!ForgeEventFactory.getMobGriefingEvent(level, enderman)) {
+            return false;
+        }
+        BlockState scaffoldState = enderman.getCarriedBlock();
+        if (!isUsefulScaffoldBlock(scaffoldState)) {
+            return false;
+        }
         BlockPos targetFeet = BlockPos.containing(target.getX(), target.getY(), target.getZ());
         if (!targetFeet.equals(rampTargetFeet)) {
             rampTargetFeet = targetFeet;
@@ -131,8 +120,7 @@ public class AdaptiveEndermanTacticsGoal extends Goal {
             int distance = Math.max(1, rampRise - step);
             BlockPos pos = new BlockPos(targetFeet.getX(), rampBaseY + step, targetFeet.getZ()).relative(rampApproach, distance);
             if (canPlaceRampStep(level, pos, rampApproach, step == 0)) {
-                BlockState carried = enderman.getCarriedBlock();
-                level.setBlock(pos, isUsefulScaffoldBlock(carried) ? carried : scaffoldState, 3);
+                level.setBlock(pos, scaffoldState, 3);
                 enderman.setCarriedBlock(null);
                 enderman.randomTeleport(pos.getX() + 0.5D, pos.getY() + 1.0D, pos.getZ() + 0.5D, true);
                 AdaptiveAIGoalUtils.debug(enderman, tierSupplier, "enderman placed anti-pillar scaffold");
@@ -142,53 +130,9 @@ public class AdaptiveEndermanTacticsGoal extends Goal {
         return false;
     }
 
-    private BlockState randomScaffoldState(boolean inEnd) {
-        BlockState[] options = inEnd ? END_SCAFFOLD_BLOCKS : OVERWORLD_SCAFFOLD_BLOCKS;
-        return options[enderman.getRandom().nextInt(options.length)];
-    }
-
-    private void prepareScaffoldBlock(ServerLevel level, BlockState scaffoldState) {
-        BlockState carried = enderman.getCarriedBlock();
-        if (isUsefulScaffoldBlock(carried)) {
-            return;
-        }
-        if (carried != null) {
-            if (!tryPlaceDiscardedBlock(level, carried)) {
-                enderman.spawnAtLocation(new ItemStack(carried.getBlock()));
-            }
-        }
-        enderman.setCarriedBlock(scaffoldState);
-        AdaptiveAIGoalUtils.debug(enderman, tierSupplier, "enderman swapped carried block for scaffold");
-    }
-
     private boolean isUsefulScaffoldBlock(BlockState state) {
         return state != null && !state.liquid()
                 && !state.getCollisionShape(enderman.level(), enderman.blockPosition()).isEmpty();
-    }
-
-    private boolean tryPlaceDiscardedBlock(ServerLevel level, BlockState carried) {
-        BlockPos origin = enderman.blockPosition();
-        BlockPos[] candidates = {
-                origin,
-                origin.relative(Direction.NORTH),
-                origin.relative(Direction.EAST),
-                origin.relative(Direction.SOUTH),
-                origin.relative(Direction.WEST)
-        };
-        for (BlockPos pos : candidates) {
-            if (canPlaceDiscardedBlock(level, carried, pos)) {
-                level.setBlock(pos, carried, 3);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean canPlaceDiscardedBlock(ServerLevel level, BlockState carried, BlockPos pos) {
-        return level.getWorldBorder().isWithinBounds(pos)
-                && level.getBlockState(pos).isAir()
-                && !level.getBlockState(pos.below()).getCollisionShape(level, pos.below()).isEmpty()
-                && carried.canSurvive(level, pos);
     }
 
     private Direction sharedRampDirection(BlockPos targetFeet) {
