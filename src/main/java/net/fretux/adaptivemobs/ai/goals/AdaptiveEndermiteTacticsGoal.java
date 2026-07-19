@@ -38,7 +38,7 @@ public class AdaptiveEndermiteTacticsGoal extends Goal {
     public void start() {
         cooldown = 18 + mob.getRandom().nextInt(28);
         LivingEntity target = currentTarget();
-        if (target == null) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         rememberedTarget = target;
@@ -61,10 +61,12 @@ public class AdaptiveEndermiteTacticsGoal extends Goal {
 
     private LivingEntity currentTarget() {
         LivingEntity target = mob.getTarget();
-        if (target != null && target.isAlive()) {
+        if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return target;
         }
-        if (rememberedTarget != null && rememberedTarget.isAlive() && mob.distanceToSqr(rememberedTarget) < 16.0D * 16.0D) {
+        if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(rememberedTarget)
+                && mob.distanceToSqr(rememberedTarget) < 16.0D * 16.0D
+                && mob.canAttack(rememberedTarget)) {
             return rememberedTarget;
         }
         rememberedTarget = null;

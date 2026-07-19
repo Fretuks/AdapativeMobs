@@ -6,17 +6,24 @@ import net.fretux.adaptivemobs.config.AMConfig;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.AbstractSkeleton;
-import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.Pillager;
+import net.minecraft.world.entity.monster.Spider;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.vehicle.AbstractMinecart;
 import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.entity.vehicle.ChestBoat;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
@@ -26,9 +33,13 @@ import java.util.function.IntSupplier;
 
 public class AdaptiveAntiCheeseGoal extends Goal {
 
+    private static final double TRAP_VEHICLE_BREAK_DISTANCE_SQR = 9.0D;
+
     private final PathfinderMob mob;
     private final IntSupplier tierSupplier;
     private int cooldown;
+    private LivingEntity activePillarTarget;
+    private int activePillarTicks;
 
     public AdaptiveAntiCheeseGoal(PathfinderMob mob, IntSupplier tierSupplier) {
         this.mob = mob;
@@ -38,28 +49,32 @@ public class AdaptiveAntiCheeseGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (!AMConfig.ENABLE_ANTI_CHEESE_AI.get() || tierSupplier.getAsInt() < 3) {
+        if (!AMConfig.ENABLE_ANTI_CHEESE_AI.get()) {
             return false;
         }
         LivingEntity target = mob.getTarget();
-        if (target == null || !target.isAlive()) {
-            return false;
-        }
-        if (isInTrapVehicle() || isNearTrapVehicle() || nearestTrapBlock() != null) {
+        if (isInTrapVehicle() || isTooCloseToTrapVehicle() || nearestTrapBlock() != null) {
             return true;
         }
-        if (--cooldown > 0) {
+        if (trappedAllyVehicle() != null) {
+            return true;
+        }
+        if (mob instanceof Zombie && mob.isPassenger() && shouldUnstack(target)) {
+            return true;
+        }
+        if (tierSupplier.getAsInt() < 3) {
+            return false;
+        }
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return false;
         }
         if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
             return true;
         }
-        if ((mob instanceof AbstractSkeleton || mob instanceof Pillager) && !mob.hasLineOfSight(target)) {
-            return true;
+        if (--cooldown > 0) {
+            return false;
         }
-        if (mob instanceof Creeper creeper && target.hasLineOfSight(creeper)
-                && AdaptivePositioningUtils.isOpenToSky(mob)
-                && Math.sqrt(mob.distanceToSqr(target)) > 4.0D) {
+        if ((mob instanceof AbstractSkeleton || mob instanceof Pillager) && !mob.hasLineOfSight(target)) {
             return true;
         }
         if (mob instanceof EnderMan && (mob.level().getFluidState(mob.blockPosition()).is(FluidTags.WATER)
@@ -75,38 +90,44 @@ public class AdaptiveAntiCheeseGoal extends Goal {
     @Override
     public void start() {
         LivingEntity target = mob.getTarget();
-        if (target == null) {
-            return;
-        }
-        mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
-
         if (avoidTrap()) {
             cooldown = 8 + mob.getRandom().nextInt(16);
             return;
         }
-        cooldown = 55 + mob.getRandom().nextInt(80);
-        if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
-            if (tryCorpseLadderSurge(target)) {
-                return;
-            }
-            if (tryZombieStack(target)) {
-                return;
-            }
-            Vec3 dest = AdaptivePositioningUtils.darkerSidePosition(mob, target, 2.5D, 0.0D);
-            moveIfReasonable(dest, 1.0D, "zombie pillar gather");
+        Entity trappedAllyVehicle = trappedAllyVehicle();
+        if (trappedAllyVehicle != null && tryDestroyTrapVehicle(trappedAllyVehicle)) {
+            cooldown = 10 + mob.getRandom().nextInt(20);
             return;
         }
+        if (mob instanceof Zombie && mob.isPassenger() && shouldUnstack(target)) {
+            mob.stopRiding();
+            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+            cooldown = 12 + mob.getRandom().nextInt(18);
+            AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie unstacking");
+            return;
+        }
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
+            return;
+        }
+        mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+
+        if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
+            activePillarTarget = target;
+            activePillarTicks = 24 + mob.getRandom().nextInt(16);
+            cooldown = 6 + mob.getRandom().nextInt(8);
+            if (tryCorpseLadderPressure(target)) {
+                return;
+            }
+            if (isPillaring(target) && tryZombieStack(target)) {
+                return;
+            }
+            pressurePillarBase(target);
+            return;
+        }
+        cooldown = 55 + mob.getRandom().nextInt(80);
         if ((mob instanceof AbstractSkeleton || mob instanceof Pillager) && !mob.hasLineOfSight(target)) {
             Vec3 dest = AdaptivePositioningUtils.darkerSidePosition(mob, target, 7.0D, 0.0D);
             moveIfReasonable(dest, 1.0D, "ranged tiny-window reposition");
-            return;
-        }
-        if (mob instanceof Creeper creeper && target.hasLineOfSight(creeper)
-                && AdaptivePositioningUtils.isOpenToSky(mob)
-                && Math.sqrt(mob.distanceToSqr(target)) > 4.0D) {
-            creeper.setSwellDir(-1);
-            Vec3 dest = AdaptivePositioningUtils.darkerSidePosition(mob, target, 5.0D, 0.0D);
-            moveIfReasonable(dest, 1.0D, "creeper open-ground hesitation");
             return;
         }
         if (mob instanceof EnderMan && (mob.level().getFluidState(mob.blockPosition()).is(FluidTags.WATER)
@@ -119,18 +140,20 @@ public class AdaptiveAntiCheeseGoal extends Goal {
     private boolean avoidTrap() {
         Entity vehicle = mob.getVehicle();
         if (vehicle instanceof Boat || vehicle instanceof AbstractMinecart) {
-            mob.stopRiding();
+            mob.getNavigation().stop();
+            tryDestroyTrapVehicle(vehicle);
             moveAwayFrom(vehicle.position(), 1.15D, "trap vehicle escape");
             return true;
         }
         Entity trapVehicle = nearestTrapVehicle();
-        if (trapVehicle != null && mob.distanceToSqr(trapVehicle) < 2.9D) {
-            moveAwayFrom(trapVehicle.position(), 1.05D, "trap vehicle avoidance");
+        if (trapVehicle != null && mob.distanceToSqr(trapVehicle) < TRAP_VEHICLE_BREAK_DISTANCE_SQR) {
+            tryDestroyTrapVehicle(trapVehicle);
             return true;
         }
-        Vec3 trapBlock = nearestTrapBlock();
+        BlockPos trapBlock = nearestTrapBlock();
         if (trapBlock != null) {
-            moveAwayFrom(trapBlock, 1.05D, "trap block avoidance");
+            tryDestroyTrapBlock(trapBlock);
+            moveAwayFrom(Vec3.atCenterOf(trapBlock), 1.05D, "trap block avoidance");
             return true;
         }
         return false;
@@ -141,13 +164,13 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         return vehicle instanceof Boat || vehicle instanceof AbstractMinecart;
     }
 
-    private boolean isNearTrapVehicle() {
+    private boolean isTooCloseToTrapVehicle() {
         Entity trapVehicle = nearestTrapVehicle();
-        return trapVehicle != null && mob.distanceToSqr(trapVehicle) < 2.9D;
+        return trapVehicle != null && mob.distanceToSqr(trapVehicle) < TRAP_VEHICLE_BREAK_DISTANCE_SQR;
     }
 
     private Entity nearestTrapVehicle() {
-        List<Entity> vehicles = mob.level().getEntitiesOfClass(Entity.class, mob.getBoundingBox().inflate(2.5D),
+        List<Entity> vehicles = mob.level().getEntitiesOfClass(Entity.class, mob.getBoundingBox().inflate(3.5D),
                 entity -> entity instanceof Boat || entity instanceof AbstractMinecart);
         Entity nearest = null;
         double best = Double.MAX_VALUE;
@@ -161,8 +184,105 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         return nearest;
     }
 
-    private Vec3 nearestTrapBlock() {
-        Vec3 nearest = null;
+    private Entity trappedAllyVehicle() {
+        List<Entity> vehicles = mob.level().getEntitiesOfClass(Entity.class, mob.getBoundingBox().inflate(8.0D),
+                entity -> isTrapVehicle(entity) && hasTrappedHostilePassenger(entity));
+        Entity nearest = null;
+        double best = Double.MAX_VALUE;
+        for (Entity vehicle : vehicles) {
+            double dist = mob.distanceToSqr(vehicle);
+            if (dist < best) {
+                best = dist;
+                nearest = vehicle;
+            }
+        }
+        return nearest;
+    }
+
+    private boolean hasTrappedHostilePassenger(Entity vehicle) {
+        for (Entity passenger : vehicle.getPassengers()) {
+            if (passenger != mob && passenger instanceof Mob trapped && trapped instanceof Enemy && trapped.isAlive()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean canContinueToUse() {
+        return activePillarTicks > 0
+                && mob instanceof Zombie
+                && AdaptiveAIGoalUtils.isValidAdaptiveTarget(activePillarTarget)
+                && isVerticalObstacleCheese(activePillarTarget);
+    }
+
+    @Override
+    public void tick() {
+        if (activePillarTicks-- <= 0 || !(mob instanceof Zombie)
+                || !AdaptiveAIGoalUtils.isValidAdaptiveTarget(activePillarTarget)) {
+            return;
+        }
+        mob.getLookControl().setLookAt(activePillarTarget, 30.0F, 30.0F);
+        if (mob.isPassenger()) {
+            tryCorpseLadderPressure(activePillarTarget);
+            return;
+        }
+        if (!tryZombieStack(activePillarTarget)) {
+            pressurePillarBase(activePillarTarget);
+        }
+    }
+
+    private boolean isTrapVehicle(Entity entity) {
+        return entity instanceof Boat || entity instanceof AbstractMinecart;
+    }
+
+    private boolean tryDestroyTrapVehicle(Entity vehicle) {
+        if (mob.isPassenger() && mob.getVehicle() != vehicle) {
+            return false;
+        }
+        if (mob.distanceToSqr(vehicle) > TRAP_VEHICLE_BREAK_DISTANCE_SQR) {
+            mob.getNavigation().moveTo(vehicle.getX(), vehicle.getY(), vehicle.getZ(), 1.12D);
+            AdaptiveAIGoalUtils.debug(mob, tierSupplier, "moving to break ally trap vehicle");
+            return true;
+        }
+        mob.swing(mob.getUsedItemHand());
+        dropTrapVehicleItem(vehicle);
+        vehicle.ejectPassengers();
+        vehicle.discard();
+        AdaptiveAIGoalUtils.debug(mob, tierSupplier, "breaking ally trap vehicle");
+        return true;
+    }
+
+    private void dropTrapVehicleItem(Entity vehicle) {
+        Item drop = null;
+        if (vehicle instanceof Boat boat) {
+            drop = boatDrop(boat);
+        } else if (vehicle instanceof AbstractMinecart) {
+            drop = Items.MINECART;
+        }
+        if (drop != null) {
+            vehicle.spawnAtLocation(drop);
+        }
+    }
+
+    private Item boatDrop(Boat boat) {
+        boolean chest = boat instanceof ChestBoat;
+        return switch (boat.getVariant()) {
+            case OAK -> chest ? Items.OAK_CHEST_BOAT : Items.OAK_BOAT;
+            case SPRUCE -> chest ? Items.SPRUCE_CHEST_BOAT : Items.SPRUCE_BOAT;
+            case BIRCH -> chest ? Items.BIRCH_CHEST_BOAT : Items.BIRCH_BOAT;
+            case JUNGLE -> chest ? Items.JUNGLE_CHEST_BOAT : Items.JUNGLE_BOAT;
+            case ACACIA -> chest ? Items.ACACIA_CHEST_BOAT : Items.ACACIA_BOAT;
+            case DARK_OAK -> chest ? Items.DARK_OAK_CHEST_BOAT : Items.DARK_OAK_BOAT;
+            case MANGROVE -> chest ? Items.MANGROVE_CHEST_BOAT : Items.MANGROVE_BOAT;
+            case CHERRY -> chest ? Items.CHERRY_CHEST_BOAT : Items.CHERRY_BOAT;
+            case BAMBOO -> chest ? Items.BAMBOO_CHEST_RAFT : Items.BAMBOO_RAFT;
+            default -> chest ? Items.OAK_CHEST_BOAT : Items.OAK_BOAT;
+        };
+    }
+
+    private BlockPos nearestTrapBlock() {
+        BlockPos nearest = null;
         double best = Double.MAX_VALUE;
         for (int x = -1; x <= 1; x++) {
             for (int y = -1; y <= 1; y++) {
@@ -171,8 +291,8 @@ public class AdaptiveAntiCheeseGoal extends Goal {
                     if (!isTrapBlock(state)) {
                         continue;
                     }
-                    Vec3 pos = Vec3.atCenterOf(mob.blockPosition().offset(x, y, z));
-                    double dist = mob.position().distanceToSqr(pos);
+                    BlockPos pos = mob.blockPosition().offset(x, y, z);
+                    double dist = mob.position().distanceToSqr(Vec3.atCenterOf(pos));
                     if (dist < best) {
                         best = dist;
                         nearest = pos;
@@ -187,6 +307,24 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         return state.is(Blocks.COBWEB)
                 || state.is(Blocks.POWDER_SNOW)
                 || state.is(Blocks.SWEET_BERRY_BUSH);
+    }
+
+    private void tryDestroyTrapBlock(BlockPos pos) {
+        BlockState state = mob.level().getBlockState(pos);
+        if (!isTrapBlock(state)) {
+            return;
+        }
+        if (mob instanceof Spider && state.is(Blocks.COBWEB)) {
+            return;
+        }
+        if (state.is(Blocks.COBWEB)) {
+            Block.popResource(mob.level(), pos, new ItemStack(Items.STRING));
+        } else if (state.is(Blocks.SWEET_BERRY_BUSH)) {
+            Block.popResource(mob.level(), pos, new ItemStack(Items.SWEET_BERRIES));
+        }
+        mob.level().destroyBlock(pos, false, mob);
+        mob.getNavigation().stop();
+        AdaptiveAIGoalUtils.debug(mob, tierSupplier, "breaking trap block");
     }
 
     private void moveAwayFrom(Vec3 threat, double speed, String debug) {
@@ -208,15 +346,15 @@ public class AdaptiveAntiCheeseGoal extends Goal {
                 zombie -> zombie != mob
                         && zombie.isAlive()
                         && !zombie.isVehicle()
-                        && !zombie.isPassenger()
                         && zombie.getTarget() == target
-                        && Math.abs(zombie.getY() - mob.getY()) < 1.25D);
+                        && !isInVehicleChain(zombie, mob)
+                        && Math.abs(zombie.getY() - mob.getY()) < 8.0D);
         Zombie bestCarrier = null;
-        double best = Double.MAX_VALUE;
+        double best = -1.0D;
         for (Zombie carrier : carriers) {
-            double dist = mob.distanceToSqr(carrier);
-            if (dist < best) {
-                best = dist;
+            double score = stackHeight(carrier) * 10.0D - mob.distanceToSqr(carrier);
+            if (score > best) {
+                best = score;
                 bestCarrier = carrier;
             }
         }
@@ -225,30 +363,106 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         }
         boolean mounted = mob.startRiding(bestCarrier, true);
         if (mounted) {
+            AdaptiveAIGoalUtils.markAdaptiveStackedZombie(mob);
             AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie stacking over obstacle");
         }
         return mounted;
     }
 
-    private boolean tryCorpseLadderSurge(LivingEntity target) {
-        if (tierSupplier.getAsInt() < 5 || !mob.isPassenger()) {
+    private boolean tryCorpseLadderPressure(LivingEntity target) {
+        if (!(mob instanceof Zombie) || !mob.isPassenger()) {
             return false;
         }
+        Entity base = stackBase(mob);
+        Vec3 baseDest = new Vec3(target.getX(), base.getY(), target.getZ());
+        if (base instanceof PathfinderMob baseMob) {
+            baseMob.getNavigation().moveTo(baseDest.x, baseDest.y, baseDest.z, 1.05D);
+        }
+
         double vertical = target.getY() - mob.getY();
         double horizontal = Math.sqrt((target.getX() - mob.getX()) * (target.getX() - mob.getX())
                 + (target.getZ() - mob.getZ()) * (target.getZ() - mob.getZ()));
-        if (vertical < 0.75D || vertical > 2.25D || horizontal > 2.0D) {
-            return false;
+        if (horizontal > 3.2D || vertical < 0.25D || vertical > 5.5D) {
+            return true;
         }
-        List<Zombie> nearby = mob.level().getEntitiesOfClass(Zombie.class, mob.getBoundingBox().inflate(2.5D),
-                zombie -> zombie.isAlive() && zombie.getTarget() == target);
-        if (nearby.size() < 3) {
-            return false;
-        }
-        mob.setDeltaMovement(mob.getDeltaMovement().add(0.0D, 0.45D, 0.0D));
+
+        Vec3 toward = target.position().subtract(mob.position());
+        double len = Math.max(0.001D, Math.sqrt(toward.x * toward.x + toward.z * toward.z));
+        double lift = tierSupplier.getAsInt() >= 5 ? 0.42D : 0.32D;
+        mob.setDeltaMovement(mob.getDeltaMovement().add(toward.x / len * 0.18D, lift, toward.z / len * 0.18D));
         mob.hurtMarked = true;
-        AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie corpse ladder surge");
+
+        if (vertical <= 1.8D && horizontal <= 2.4D) {
+            mob.stopRiding();
+            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+        }
+        AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie corpse ladder pressure");
         return true;
+    }
+
+    private void pressurePillarBase(LivingEntity target) {
+        Vec3 dest = AdaptivePositioningUtils.darkerSidePosition(mob, target, 1.4D, 0.0D);
+        if (!moveIfReasonable(dest, 1.08D, "zombie pillar gather")) {
+            mob.getNavigation().moveTo(target.getX(), mob.getY(), target.getZ(), 1.08D);
+        }
+        double horizontal = Math.sqrt((target.getX() - mob.getX()) * (target.getX() - mob.getX())
+                + (target.getZ() - mob.getZ()) * (target.getZ() - mob.getZ()));
+        double vertical = target.getY() - mob.getY();
+        if (horizontal < 2.0D && vertical > 1.8D && mob.onGround()) {
+            Vec3 toward = target.position().subtract(mob.position());
+            double len = Math.max(0.001D, Math.sqrt(toward.x * toward.x + toward.z * toward.z));
+            mob.setDeltaMovement(mob.getDeltaMovement().add(toward.x / len * 0.10D, 0.26D, toward.z / len * 0.10D));
+            mob.hurtMarked = true;
+        }
+    }
+
+    private boolean shouldUnstack(LivingEntity target) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
+            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+            return true;
+        }
+        if (mob.distanceToSqr(target) > 8.0D * 8.0D) {
+            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+            return true;
+        }
+        Entity base = stackBase(mob);
+        double verticalFromBase = target.getY() - base.getY();
+        double horizontalFromBase = Math.sqrt((target.getX() - base.getX()) * (target.getX() - base.getX())
+                + (target.getZ() - base.getZ()) * (target.getZ() - base.getZ()));
+        if (verticalFromBase > 2.5D && horizontalFromBase < 5.5D) {
+            return false;
+        }
+        AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+        return !isVerticalObstacleCheese(target);
+    }
+
+    private int stackHeight(Entity entity) {
+        int height = 1;
+        Entity cursor = entity;
+        while (cursor.getVehicle() instanceof Zombie) {
+            height++;
+            cursor = cursor.getVehicle();
+        }
+        return height;
+    }
+
+    private boolean isInVehicleChain(Entity start, Entity candidate) {
+        Entity cursor = start;
+        while (cursor != null) {
+            if (cursor == candidate) {
+                return true;
+            }
+            cursor = cursor.getVehicle();
+        }
+        return false;
+    }
+
+    private Entity stackBase(Entity entity) {
+        Entity cursor = entity;
+        while (cursor.getVehicle() instanceof Zombie) {
+            cursor = cursor.getVehicle();
+        }
+        return cursor;
     }
 
     private boolean isVerticalObstacleCheese(LivingEntity target) {
@@ -285,10 +499,12 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         return !mob.level().getBlockState(pos).getCollisionShape(mob.level(), pos).isEmpty();
     }
 
-    private void moveIfReasonable(Vec3 dest, double speed, String debug) {
+    private boolean moveIfReasonable(Vec3 dest, double speed, String debug) {
         if (AdaptivePositioningUtils.isReasonableGround(mob, dest)) {
             mob.getNavigation().moveTo(dest.x, dest.y, dest.z, speed);
             AdaptiveAIGoalUtils.debug(mob, tierSupplier, debug);
+            return true;
         }
+        return false;
     }
 }

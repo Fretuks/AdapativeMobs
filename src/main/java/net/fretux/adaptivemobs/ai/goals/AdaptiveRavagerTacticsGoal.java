@@ -40,7 +40,7 @@ public class AdaptiveRavagerTacticsGoal extends Goal {
     public void start() {
         cooldown = 55 + ravager.getRandom().nextInt(65);
         LivingEntity target = currentTarget();
-        if (target == null) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         rememberedTarget = target;
@@ -65,10 +65,12 @@ public class AdaptiveRavagerTacticsGoal extends Goal {
 
     private LivingEntity currentTarget() {
         LivingEntity target = ravager.getTarget();
-        if (target != null && target.isAlive()) {
+        if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return target;
         }
-        if (rememberedTarget != null && rememberedTarget.isAlive() && ravager.distanceToSqr(rememberedTarget) < 20.0D * 20.0D) {
+        if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(rememberedTarget)
+                && ravager.distanceToSqr(rememberedTarget) < 20.0D * 20.0D
+                && ravager.canAttack(rememberedTarget)) {
             return rememberedTarget;
         }
         rememberedTarget = null;

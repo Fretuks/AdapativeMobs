@@ -30,8 +30,7 @@ public class AdaptiveShulkerTacticsGoal extends Goal {
                 && AMConfig.ENABLE_SHULKER_ADVANCED_AI.get()
                 && AMConfig.AI_SHULKER.get()
                 && tierSupplier.getAsInt() >= 2
-                && shulker.getTarget() != null
-                && shulker.getTarget().isAlive()
+                && AdaptiveAIGoalUtils.isValidAdaptiveTarget(shulker.getTarget())
                 && --cooldown <= 0;
     }
 
@@ -42,7 +41,7 @@ public class AdaptiveShulkerTacticsGoal extends Goal {
         cooldown = inEnd && tier >= 5 ? 30 + shulker.getRandom().nextInt(35)
                 : 50 + shulker.getRandom().nextInt(tier >= 5 ? 45 : 70);
         LivingEntity target = shulker.getTarget();
-        if (target == null) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         if (!shulker.hasLineOfSight(target)) {
@@ -58,7 +57,9 @@ public class AdaptiveShulkerTacticsGoal extends Goal {
         if (tier >= 4) {
             double radius = inEnd && tier >= 5 ? 18.0D : 12.0D;
             AdaptiveTargetingUtils.nearbyHostiles(shulker, radius,
-                            other -> other instanceof Shulker && (other.getTarget() == null || other.getTarget() == target))
+                            other -> other instanceof Shulker
+                                    && (other.getTarget() == null || other.getTarget() == target)
+                                    && other.canAttack(target))
                     .forEach(other -> other.setTarget(target));
             AdaptiveAIGoalUtils.debug(shulker, tierSupplier, "shulker coordinated target");
         }

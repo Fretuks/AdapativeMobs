@@ -34,8 +34,8 @@ public class AdaptiveTargetPriorityGoal extends Goal {
         cooldown = 80 + mob.getRandom().nextInt(80);
         double radius = AdaptiveAIGoalUtils.followRange(mob, 16.0D);
         List<Player> players = mob.level().getEntitiesOfClass(Player.class, mob.getBoundingBox().inflate(radius),
-                player -> player.isAlive() && !player.isCreative() && !player.isSpectator()
-                        && mob.canAttack(player) && mob.hasLineOfSight(player));
+                player -> AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) && mob.canAttack(player)
+                        && mob.hasLineOfSight(player));
         Player best = null;
         double bestScore = currentScore();
         for (Player player : players) {
@@ -52,7 +52,7 @@ public class AdaptiveTargetPriorityGoal extends Goal {
     }
 
     private double currentScore() {
-        if (mob.getTarget() instanceof Player player) {
+        if (mob.getTarget() instanceof Player player && AdaptiveAIGoalUtils.isValidAdaptiveTarget(player)) {
             return AdaptiveAIGoalUtils.playerPriorityScore(mob, player);
         }
         return 0.0D;

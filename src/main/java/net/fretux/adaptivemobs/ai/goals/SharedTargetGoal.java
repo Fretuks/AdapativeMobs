@@ -1,5 +1,6 @@
 package net.fretux.adaptivemobs.ai.goals;
 
+import net.fretux.adaptivemobs.ai.AdaptiveAIGoalUtils;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -28,19 +29,20 @@ public class SharedTargetGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return tierSupplier.getAsInt() >= minTier && mob.getTarget() != null && --cooldown <= 0;
+        return tierSupplier.getAsInt() >= minTier && AdaptiveAIGoalUtils.isValidAdaptiveTarget(mob.getTarget())
+                && --cooldown <= 0;
     }
 
     @Override
     public void start() {
         cooldown = 40 + mob.getRandom().nextInt(40);
         LivingEntity target = mob.getTarget();
-        if (target == null || !target.isAlive()) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         AABB box = mob.getBoundingBox().inflate(radius);
         List<Mob> allies = mob.level().getEntitiesOfClass(Mob.class, box,
-                other -> other != mob && other instanceof Enemy && other.getTarget() == null);
+                other -> other != mob && other instanceof Enemy && other.getTarget() == null && other.canAttack(target));
         int shared = 0;
         for (Mob ally : allies) {
             if (shared++ >= 4) {

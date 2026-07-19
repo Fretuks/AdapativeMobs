@@ -27,6 +27,7 @@ import net.fretux.adaptivemobs.ai.goals.AdaptiveSpiderDisengageGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveSpiderTacticsGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveSupportGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveTargetPriorityGoal;
+import net.fretux.adaptivemobs.ai.goals.AdaptiveTargetSanitizerGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveThreatMemoryGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveWardenTacticsGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveWitchTacticsGoal;
@@ -92,6 +93,7 @@ public final class AdaptiveGoalInjector {
         }
         PathfinderMob pathfinder = mob instanceof PathfinderMob pf ? pf : null;
         IntSupplier tier = () -> AdaptiveDifficultyManager.getMobTier(level, mob.getType());
+        mob.targetSelector.addGoal(0, new AdaptiveTargetSanitizerGoal(mob));
 
         if (tier.getAsInt() >= 4) {
             mob.targetSelector.addGoal(2, new AdaptiveSharedTargetGoal(mob, tier, 4, 12.0D));
@@ -106,6 +108,7 @@ public final class AdaptiveGoalInjector {
             // otherwise it can never take over while the zombie is already fighting.
             mob.goalSelector.addGoal(1, new AdaptiveZombiePackTacticsGoal((Zombie) mob, tier));
         } else if (pathfinder != null && mob instanceof Creeper creeper && AMConfig.AI_CREEPER.get()) {
+            creeper.maxSwell = creeperFuseTicks(tier.getAsInt());
             mob.goalSelector.addGoal(2, new AdaptiveCreeperPressureGoal(creeper, tier));
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 3.0D, 1.0D, false));
         } else if (pathfinder != null && mob instanceof Spider && AMConfig.AI_SPIDER.get()) {
@@ -145,7 +148,7 @@ public final class AdaptiveGoalInjector {
             mob.goalSelector.addGoal(8, new AdaptiveBiomeTacticsGoal(pathfinder, tier));
         }
         if (pathfinder != null && AMConfig.ENABLE_ANTI_CHEESE_AI.get()) {
-            mob.goalSelector.addGoal(mob instanceof Zombie ? 1 : 7, new AdaptiveAntiCheeseGoal(pathfinder, tier));
+            mob.goalSelector.addGoal(0, new AdaptiveAntiCheeseGoal(pathfinder, tier));
         }
         if (pathfinder != null && isRangedMob(mob) && rangedEnabled(mob)) {
             mob.goalSelector.addGoal(3, new AdaptiveRangedAttackGoal(pathfinder, tier, rangedOptimalRange(mob), 1.0D));
@@ -305,6 +308,10 @@ public final class AdaptiveGoalInjector {
             return 0.9D;
         }
         return 1.05D;
+    }
+
+    private static int creeperFuseTicks(int tier) {
+        return Math.max(18, 30 - Math.max(0, tier - 1) * 3);
     }
 
     private static boolean conservativeMelee(Mob mob) {

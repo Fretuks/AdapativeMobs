@@ -91,9 +91,11 @@ public final class AdaptiveSpecialAbilities {
             if (mob.getRandom().nextFloat() < poisonChance) {
                 arrow.addEffect(new MobEffectInstance(MobEffects.POISON, 80 + mob.getRandom().nextInt(41), 0));
             }
-            if (tier >= 5 && target != null && AdaptiveAIGoalUtils.isBlockingShield(target) && mob.getRandom().nextFloat() < 0.18F) {
+            if (tier >= 5 && AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)
+                    && AdaptiveAIGoalUtils.isBlockingShield(target) && mob.getRandom().nextFloat() < 0.18F) {
                 arrow.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 60, 0));
-            } else if (tier >= 5 && target != null && target.isSprinting() && mob.getRandom().nextFloat() < 0.18F) {
+            } else if (tier >= 5 && AdaptiveAIGoalUtils.isValidAdaptiveTarget(target) && target.isSprinting()
+                    && mob.getRandom().nextFloat() < 0.18F) {
                 arrow.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 0));
             }
             return;
@@ -145,7 +147,8 @@ public final class AdaptiveSpecialAbilities {
                 continue;
             }
             ServerLevel level = event.getServer().getLevel(pending.dimension);
-            if (level != null && pending.mob.isAlive() && pending.target.isAlive()) {
+            if (level != null && pending.mob.isAlive() && AdaptiveAIGoalUtils.isValidAdaptiveTarget(pending.target)
+                    && pending.mob.canAttack(pending.target)) {
                 Vec3 side = AdaptivePositioningUtils.sidePosition(pending.mob, pending.target, 1.6D,
                         pending.mob.getRandom().nextBoolean() ? 1.0D : -1.0D, 0.0D);
                 pending.mob.moveTo(side.x, side.y, side.z, pending.mob.getYRot(), pending.mob.getXRot());
@@ -159,7 +162,7 @@ public final class AdaptiveSpecialAbilities {
 
     private static void onMobDamaged(ServerLevel level, Mob mob, LivingEntity attacker, Entity directEntity) {
         int tier = tier(level, mob);
-        if (tier <= 0) {
+        if (tier <= 0 || !AdaptiveAIGoalUtils.isValidAdaptiveTarget(attacker) || !mob.canAttack(attacker)) {
             return;
         }
         if (tier >= 5 && mob instanceof ZombifiedPiglin && ready(mob, "blood_call", 160)) {
@@ -170,7 +173,7 @@ public final class AdaptiveSpecialAbilities {
             }
             AdaptiveAIGoalUtils.debug(mob, () -> tier, "zombified piglin blood call");
         }
-        if (tier >= 4 && mob instanceof Spider && ready(mob, "web_retreat", 150)) {
+        if (tier >= 4 && mob instanceof Spider && ready(mob, "web_retreat", 600)) {
             placeTemporaryCobweb(level, attacker.blockPosition(), level.getGameTime() + 100 + mob.getRandom().nextInt(61));
         }
         if (tier >= 4 && mob instanceof EnderMan enderman && directEntity == attacker && ready(mob, "backstep_ambush", tier >= 5 ? 80 : 130)) {
@@ -215,7 +218,7 @@ public final class AdaptiveSpecialAbilities {
 
     private static void onPlayerHurt(ServerLevel level, ServerPlayer player, Mob mob, Entity directEntity, LivingHurtEvent event) {
         int tier = tier(level, mob);
-        if (tier <= 0) {
+        if (tier <= 0 || !AdaptiveAIGoalUtils.isValidAdaptiveTarget(player)) {
             return;
         }
         if (tier >= 4 && mob instanceof Drowned && mob.isInWater() && player.isInWater() && ready(mob, "dragging_grip", 160)) {
@@ -227,7 +230,7 @@ public final class AdaptiveSpecialAbilities {
             player.addEffect(new MobEffectInstance(MobEffects.WITHER, tier >= 5 ? 140 : 100, 0));
             shove(player, mob.position(), tier >= 5 ? 0.55D : 0.35D, 0.08D);
         }
-        if (mob instanceof Spider && tier >= 4 && ready(mob, "web_hit", mob instanceof CaveSpider ? 100 : 140)) {
+        if (mob instanceof Spider && tier >= 4 && ready(mob, "web_hit", mob instanceof CaveSpider ? 400 : 600)) {
             placeTemporaryCobweb(level, player.blockPosition(), level.getGameTime() + 100 + mob.getRandom().nextInt(61));
         }
         if (mob instanceof CaveSpider && tier >= 3

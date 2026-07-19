@@ -28,6 +28,9 @@ public final class AdaptiveMemory {
         if (!(mob.level() instanceof ServerLevel level)) {
             return;
         }
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) || !mob.canAttack(player)) {
+            return;
+        }
         THREATS.put(mob, new ThreatEntry(player.getUUID(), level.getGameTime() + ticks));
     }
 
@@ -41,7 +44,9 @@ public final class AdaptiveMemory {
             return Optional.empty();
         }
         ServerPlayer player = level.getServer().getPlayerList().getPlayer(entry.playerId);
-        return player != null && player.isAlive() ? Optional.of(player) : Optional.empty();
+        return AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) && mob.canAttack(player)
+                ? Optional.of(player)
+                : Optional.empty();
     }
 
     public static void rememberSound(ServerLevel level, BlockPos pos, SoundKind kind, int ticks) {

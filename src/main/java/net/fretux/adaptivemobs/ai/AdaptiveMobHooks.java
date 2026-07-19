@@ -27,7 +27,7 @@ public final class AdaptiveMobHooks {
             return;
         }
         LivingEntity target = mob.getTarget();
-        if (target == null || !target.isAlive()) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         int tier = AdaptiveDifficultyManager.getMobTier(level, mob.getType());

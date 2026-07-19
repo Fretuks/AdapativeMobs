@@ -1,6 +1,7 @@
 package net.fretux.adaptivemobs.event;
 
 import net.fretux.adaptivemobs.ai.AdaptiveGoalInjector;
+import net.fretux.adaptivemobs.ai.AdaptiveAIGoalUtils;
 import net.fretux.adaptivemobs.ai.AdaptiveMemory;
 import net.fretux.adaptivemobs.ai.AdaptiveMobHooks;
 import net.fretux.adaptivemobs.ai.AdaptiveSpecialAbilities;
@@ -61,6 +62,10 @@ public class AdaptiveMobsEvents {
     public void onBlockBreak(BlockEvent.BreakEvent event) {
         if (AMConfig.enabled && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()
                 && event.getLevel() instanceof ServerLevel level) {
+            if (event.getPlayer() instanceof ServerPlayer player
+                    && !AdaptiveAIGoalUtils.isValidAdaptiveTarget(player)) {
+                return;
+            }
             AdaptiveMemory.rememberSound(level, event.getPos(), AdaptiveMemory.SoundKind.BLOCK_BREAK, 20 * 8);
         }
     }
@@ -68,7 +73,8 @@ public class AdaptiveMobsEvents {
     @SubscribeEvent
     public void onItemUseFinish(LivingEntityUseItemEvent.Finish event) {
         if (AMConfig.enabled && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()
-                && event.getEntity() instanceof ServerPlayer player && event.getItem().isEdible()) {
+                && event.getEntity() instanceof ServerPlayer player && event.getItem().isEdible()
+                && AdaptiveAIGoalUtils.isValidAdaptiveTarget(player)) {
             AdaptiveMemory.rememberSound(player.serverLevel(), player.blockPosition(), AdaptiveMemory.SoundKind.EATING, 20 * 6);
         }
     }
@@ -102,7 +108,8 @@ public class AdaptiveMobsEvents {
             AdaptiveGoalInjector.inject(mob, level, AdaptiveDifficultyManager.getMobTier(level, mob.getType()));
         }
         if (AMConfig.enabled && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()
-                && entity instanceof Projectile projectile && projectile.getOwner() instanceof ServerPlayer player) {
+                && entity instanceof Projectile projectile && projectile.getOwner() instanceof ServerPlayer player
+                && AdaptiveAIGoalUtils.isValidAdaptiveTarget(player)) {
             AdaptiveMemory.rememberSound(level, player.blockPosition(), AdaptiveMemory.SoundKind.BOW_SHOT, 20 * 6);
         }
     }

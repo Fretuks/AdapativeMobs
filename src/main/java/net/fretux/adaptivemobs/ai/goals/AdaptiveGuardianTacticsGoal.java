@@ -32,8 +32,7 @@ public class AdaptiveGuardianTacticsGoal extends Goal {
                 && AMConfig.ENABLE_GUARDIAN_ADVANCED_AI.get()
                 && AMConfig.AI_GUARDIAN.get()
                 && tierSupplier.getAsInt() >= 2
-                && guardian.getTarget() != null
-                && guardian.getTarget().isAlive()
+                && AdaptiveAIGoalUtils.isValidAdaptiveTarget(guardian.getTarget())
                 && --cooldown <= 0;
     }
 
@@ -42,7 +41,7 @@ public class AdaptiveGuardianTacticsGoal extends Goal {
         boolean elder = guardian instanceof ElderGuardian;
         cooldown = elder ? 90 + guardian.getRandom().nextInt(80) : AdaptiveAIGoalUtils.nextCooldown(guardian);
         LivingEntity target = guardian.getTarget();
-        if (target == null) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         int tier = tierSupplier.getAsInt();
@@ -62,7 +61,7 @@ public class AdaptiveGuardianTacticsGoal extends Goal {
     private void retargetLowHealthGuardianTarget(LivingEntity current) {
         List<LivingEntity> candidates = guardian.level().getEntitiesOfClass(LivingEntity.class,
                 guardian.getBoundingBox().inflate(12.0D),
-                entity -> entity != guardian && entity.isAlive() && guardian.canAttack(entity)
+                entity -> entity != guardian && AdaptiveAIGoalUtils.isValidAdaptiveTarget(entity) && guardian.canAttack(entity)
                         && guardian.hasLineOfSight(entity)
                         && AdaptiveAIGoalUtils.healthFraction(entity) < AdaptiveAIGoalUtils.healthFraction(current));
         if (!candidates.isEmpty()) {

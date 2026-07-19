@@ -28,17 +28,19 @@ public class AdaptiveSharedTargetGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return tierSupplier.getAsInt() >= minTier && mob.getTarget() != null && --cooldown <= 0;
+        return tierSupplier.getAsInt() >= minTier && AdaptiveAIGoalUtils.isValidAdaptiveTarget(mob.getTarget())
+                && --cooldown <= 0;
     }
 
     @Override
     public void start() {
         cooldown = AdaptiveAIGoalUtils.nextCooldown(mob);
         LivingEntity target = mob.getTarget();
-        if (target == null || !target.isAlive()) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
-        List<Mob> allies = AdaptiveTargetingUtils.nearbyHostiles(mob, radius, other -> other.getTarget() == null);
+        List<Mob> allies = AdaptiveTargetingUtils.nearbyHostiles(mob, radius,
+                other -> other.getTarget() == null && other.canAttack(target));
         int shared = 0;
         for (Mob ally : allies) {
             if (shared++ >= 4) {

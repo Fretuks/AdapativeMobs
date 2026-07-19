@@ -37,18 +37,21 @@ public class AdaptiveWardenTacticsGoal extends Goal {
     public void start() {
         cooldown = 80 + warden.getRandom().nextInt(80);
         LivingEntity target = warden.getTarget();
-        if (target != null && target.isAlive()) {
+        if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             rememberedTarget = target;
             warden.getLookControl().setLookAt(target, 25.0F, 25.0F);
             return;
         }
-        if (rememberedTarget != null && rememberedTarget.isAlive() && warden.distanceToSqr(rememberedTarget) < 24.0D * 24.0D) {
+        if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(rememberedTarget)
+                && warden.distanceToSqr(rememberedTarget) < 24.0D * 24.0D
+                && warden.canAttack(rememberedTarget)) {
             warden.setAttackTarget(rememberedTarget);
             AdaptiveAIGoalUtils.debug(warden, tierSupplier, "warden conservative target persistence");
         }
 
         LivingEntity hurtBy = warden.getLastHurtByMob();
-        if (tierSupplier.getAsInt() >= 5 && hurtBy != null && hurtBy.isAlive() && AdaptiveAIGoalUtils.isUsingRangedWeapon(hurtBy)) {
+        if (tierSupplier.getAsInt() >= 5 && AdaptiveAIGoalUtils.isValidAdaptiveTarget(hurtBy)
+                && warden.canAttack(hurtBy) && AdaptiveAIGoalUtils.isUsingRangedWeapon(hurtBy)) {
             repeatedRangedTicks = hurtBy == lastHurtBy ? repeatedRangedTicks + 1 : 1;
             lastHurtBy = hurtBy;
             if (repeatedRangedTicks >= 2) {

@@ -34,14 +34,15 @@ public class AdaptiveAirbornePositioningGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return tierSupplier.getAsInt() >= 2 && mob.getTarget() != null && mob.getTarget().isAlive() && --cooldown <= 0;
+        return tierSupplier.getAsInt() >= 2 && AdaptiveAIGoalUtils.isValidAdaptiveTarget(mob.getTarget())
+                && --cooldown <= 0;
     }
 
     @Override
     public void start() {
         cooldown = AdaptiveAIGoalUtils.nextCooldown(mob);
         LivingEntity target = mob.getTarget();
-        if (target == null || !target.isAlive()) {
+        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         int tier = tierSupplier.getAsInt();

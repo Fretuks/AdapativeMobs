@@ -15,6 +15,8 @@ import java.util.function.IntSupplier;
 
 public final class AdaptiveAIGoalUtils {
 
+    private static final String ADAPTIVE_STACKED_ZOMBIE_KEY = "am_adaptive_stacked_zombie";
+
     private AdaptiveAIGoalUtils() {
     }
 
@@ -44,6 +46,25 @@ public final class AdaptiveAIGoalUtils {
         }
         ItemStack stack = entity.getUseItem();
         return stack.isEdible();
+    }
+
+    public static boolean isValidAdaptiveTarget(LivingEntity entity) {
+        if (entity == null || !entity.isAlive()) {
+            return false;
+        }
+        return !(entity instanceof Player player) || (!player.isCreative() && !player.isSpectator());
+    }
+
+    public static void markAdaptiveStackedZombie(Mob mob) {
+        mob.getPersistentData().putBoolean(ADAPTIVE_STACKED_ZOMBIE_KEY, true);
+    }
+
+    public static boolean isAdaptiveStackedZombie(Mob mob) {
+        return mob.getPersistentData().getBoolean(ADAPTIVE_STACKED_ZOMBIE_KEY);
+    }
+
+    public static void clearAdaptiveStackedZombie(Mob mob) {
+        mob.getPersistentData().remove(ADAPTIVE_STACKED_ZOMBIE_KEY);
     }
 
     public static boolean isLikelyMeleeWeapon(ItemStack stack) {
