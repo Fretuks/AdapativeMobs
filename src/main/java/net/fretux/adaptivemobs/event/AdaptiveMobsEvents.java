@@ -153,7 +153,9 @@ public class AdaptiveMobsEvents {
             return;
         }
         Entity entity = event.getEntity();
-        if (AMConfig.enabled && entity instanceof Mob mob && mob instanceof Enemy && AMConfig.isMobEnabled(mob.getType())) {
+        // Install dormant, config-gated goals on every supported hostile so a later config reload
+        // can enable them without requiring the entity to unload and join again.
+        if (entity instanceof Mob mob && mob instanceof Enemy) {
             AdaptiveGoalInjector.inject(mob, level, AdaptiveDifficultyManager.getMobTier(level, mob.getType()));
         }
         if (AMConfig.enabled && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()

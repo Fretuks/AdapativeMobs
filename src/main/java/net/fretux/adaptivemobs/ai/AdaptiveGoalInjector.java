@@ -75,6 +75,7 @@ import net.minecraft.world.entity.monster.Zoglin;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 
 public final class AdaptiveGoalInjector {
@@ -99,22 +100,21 @@ public final class AdaptiveGoalInjector {
 
         mob.targetSelector.addGoal(2, new AdaptiveSharedTargetGoal(mob, tier, 4, 12.0D));
 
-        if (pathfinder != null && mob instanceof AbstractSkeleton && AMConfig.AI_SKELETON.get()) {
+        if (pathfinder != null && mob instanceof AbstractSkeleton) {
             mob.goalSelector.addGoal(3, new AdaptiveSkeletonShieldGoal(pathfinder, tier));
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 8.0D, 1.0D, true));
-        } else if (pathfinder != null && mob instanceof Zombie && AMConfig.AI_ZOMBIE.get()) {
+        } else if (pathfinder != null && mob instanceof Zombie) {
             mob.goalSelector.addGoal(3, new AdaptiveFlankGoal(pathfinder, tier, 2, 2.5D, 1.05D, true));
             // Priority 1: must be able to interrupt the vanilla melee attack goal (priority 2),
             // otherwise it can never take over while the zombie is already fighting.
             mob.goalSelector.addGoal(1, new AdaptiveZombiePackTacticsGoal((Zombie) mob, tier));
-        } else if (pathfinder != null && mob instanceof Creeper creeper && AMConfig.AI_CREEPER.get()) {
+        } else if (pathfinder != null && mob instanceof Creeper creeper) {
             creeper.maxSwell = creeperFuseTicks(tier.getAsInt());
             mob.goalSelector.addGoal(2, new AdaptiveCreeperPressureGoal(creeper, tier));
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 3.0D, 1.0D, false));
-        } else if (pathfinder != null && mob instanceof Spider && AMConfig.AI_SPIDER.get()) {
+        } else if (pathfinder != null && mob instanceof Spider) {
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 2.0D, 1.15D, false));
-        } else if (pathfinder != null && ((mob instanceof Witch && AMConfig.AI_WITCH.get())
-                || (mob instanceof Pillager && AMConfig.AI_PILLAGER.get()))) {
+        } else if (pathfinder != null && (mob instanceof Witch || mob instanceof Pillager)) {
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 7.0D, 1.0D, false));
         }
 
@@ -125,100 +125,111 @@ public final class AdaptiveGoalInjector {
     }
 
     private static void injectAdvanced(Mob mob, PathfinderMob pathfinder, IntSupplier tier) {
-        if (AMConfig.ENABLE_TARGET_PRIORITY_AI.get()) {
-            mob.targetSelector.addGoal(3, new AdaptiveTargetPriorityGoal(mob, tier));
+        mob.targetSelector.addGoal(3, new AdaptiveTargetPriorityGoal(mob,
+                gated(tier, () -> AMConfig.ENABLE_TARGET_PRIORITY_AI.get())));
+        if (pathfinder != null && !(mob instanceof Warden)) {
+            mob.goalSelector.addGoal(8, new AdaptiveMoraleGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_MORALE_AI.get())));
+            mob.goalSelector.addGoal(8, new AdaptiveSupportGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_SUPPORT_AI.get())));
         }
-        if (pathfinder != null && AMConfig.ENABLE_MORALE_AI.get() && !(mob instanceof Warden)) {
-            mob.goalSelector.addGoal(8, new AdaptiveMoraleGoal(pathfinder, tier));
+        if (pathfinder != null) {
+            mob.goalSelector.addGoal(2, new AdaptiveThreatMemoryGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_THREAT_MEMORY_AI.get())));
+            mob.goalSelector.addGoal(9, new AdaptiveSoundInvestigationGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get())));
+            mob.goalSelector.addGoal(8, new AdaptiveBiomeTacticsGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_BIOME_TACTICS_AI.get())));
+            mob.goalSelector.addGoal(0, new AdaptiveAntiCheeseGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_ANTI_CHEESE_AI.get())));
         }
-        if (pathfinder != null && AMConfig.ENABLE_THREAT_MEMORY_AI.get()) {
-            mob.goalSelector.addGoal(2, new AdaptiveThreatMemoryGoal(pathfinder, tier));
+        if (pathfinder != null && (mob instanceof Zombie || mob instanceof Spider)) {
+            mob.goalSelector.addGoal(6, new AdaptiveEscapeDenialGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_ESCAPE_DENIAL_AI.get())));
         }
-        if (pathfinder != null && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()) {
-            mob.goalSelector.addGoal(9, new AdaptiveSoundInvestigationGoal(pathfinder, tier));
-        }
-        if (pathfinder != null && AMConfig.ENABLE_SUPPORT_AI.get() && !(mob instanceof Warden)) {
-            mob.goalSelector.addGoal(8, new AdaptiveSupportGoal(pathfinder, tier));
-        }
-        if (pathfinder != null && AMConfig.ENABLE_ESCAPE_DENIAL_AI.get()
-                && (mob instanceof Zombie || mob instanceof Spider)) {
-            mob.goalSelector.addGoal(6, new AdaptiveEscapeDenialGoal(pathfinder, tier));
-        }
-        if (pathfinder != null && AMConfig.ENABLE_BIOME_TACTICS_AI.get()) {
-            mob.goalSelector.addGoal(8, new AdaptiveBiomeTacticsGoal(pathfinder, tier));
-        }
-        if (pathfinder != null && AMConfig.ENABLE_ANTI_CHEESE_AI.get()) {
-            mob.goalSelector.addGoal(0, new AdaptiveAntiCheeseGoal(pathfinder, tier));
-        }
-        if (pathfinder != null && isRangedMob(mob) && rangedEnabled(mob)) {
-            mob.goalSelector.addGoal(3, new AdaptiveRangedAttackGoal(pathfinder, tier, rangedOptimalRange(mob), 1.0D));
-            if (AMConfig.ENABLE_RANGED_COVER_AI.get()
-                    && (mob instanceof AbstractSkeleton || mob instanceof Pillager || mob instanceof Witch || mob instanceof Evoker)) {
-                mob.goalSelector.addGoal(6, new AdaptiveRangedCoverGoal(pathfinder, tier));
+        if (pathfinder != null && isRangedMob(mob)) {
+            mob.goalSelector.addGoal(3, new AdaptiveRangedAttackGoal(pathfinder,
+                    gated(tier, () -> rangedEnabled(mob)), rangedOptimalRange(mob), 1.0D));
+            if (mob instanceof AbstractSkeleton || mob instanceof Pillager || mob instanceof Witch || mob instanceof Evoker) {
+                mob.goalSelector.addGoal(6, new AdaptiveRangedCoverGoal(pathfinder,
+                        gated(tier, () -> rangedEnabled(mob) && AMConfig.ENABLE_RANGED_COVER_AI.get())));
             }
         }
-        if (pathfinder != null && isMeleeMob(mob) && meleeEnabled(mob)) {
-            mob.goalSelector.addGoal(5, new AdaptiveMeleePositioningGoal(pathfinder, tier, meleeSpeed(mob), conservativeMelee(mob)));
+        if (pathfinder != null && isMeleeMob(mob)) {
+            mob.goalSelector.addGoal(5, new AdaptiveMeleePositioningGoal(pathfinder,
+                    gated(tier, () -> meleeEnabled(mob)), meleeSpeed(mob), conservativeMelee(mob)));
         }
-        if (mob instanceof Creeper creeper && AMConfig.ENABLE_CREEPER_AI.get() && AMConfig.AI_CREEPER.get()) {
-            mob.goalSelector.addGoal(3, new AdaptiveCreeperTacticsGoal(creeper, tier));
+        if (mob instanceof Creeper creeper) {
+            mob.goalSelector.addGoal(3, new AdaptiveCreeperTacticsGoal(creeper,
+                    gated(tier, () -> AMConfig.ENABLE_CREEPER_AI.get() && AMConfig.AI_CREEPER.get())));
         }
-        if (pathfinder != null && mob instanceof Spider && AMConfig.ENABLE_SPIDER_AI.get() && AMConfig.AI_SPIDER.get()) {
+        if (pathfinder != null && mob instanceof Spider) {
+            IntSupplier spiderTier = gated(tier, () -> AMConfig.ENABLE_SPIDER_AI.get() && AMConfig.AI_SPIDER.get());
             // Priority 2: below disengage (1, flee always wins) but still above the vanilla
             // attack goal (3) so it can actually interrupt combat instead of being starved by it.
-            mob.goalSelector.addGoal(2, new AdaptiveSpiderTacticsGoal(pathfinder, tier, mob instanceof CaveSpider));
-            mob.goalSelector.addGoal(1, new AdaptiveSpiderDisengageGoal(pathfinder, tier, mob instanceof CaveSpider ? 3 : 4, 0.14D, 1.3D));
-            mob.goalSelector.addGoal(5, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.38D, 1.15D));
+            mob.goalSelector.addGoal(2, new AdaptiveSpiderTacticsGoal(pathfinder, spiderTier, mob instanceof CaveSpider));
+            mob.goalSelector.addGoal(1, new AdaptiveSpiderDisengageGoal(pathfinder, spiderTier, mob instanceof CaveSpider ? 3 : 4, 0.14D, 1.3D));
+            mob.goalSelector.addGoal(5, new AdaptiveLowHealthRetreatGoal(pathfinder, spiderTier, 4, 0.38D, 1.15D));
         }
-        if (mob instanceof Witch witch && AMConfig.ENABLE_WITCH_AI.get() && AMConfig.AI_WITCH.get()) {
-            mob.goalSelector.addGoal(3, new AdaptiveWitchTacticsGoal(witch, tier));
-            mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(witch, tier, 3, 0.35D, 1.0D));
+        if (mob instanceof Witch witch) {
+            IntSupplier witchTier = gated(tier, () -> AMConfig.ENABLE_WITCH_AI.get() && AMConfig.AI_WITCH.get());
+            mob.goalSelector.addGoal(3, new AdaptiveWitchTacticsGoal(witch, witchTier));
+            mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(witch, witchTier, 3, 0.35D, 1.0D));
         }
-        if (mob instanceof EnderMan enderman && AMConfig.ENABLE_ENDERMAN_AI.get() && AMConfig.AI_ENDERMAN.get()) {
-            mob.goalSelector.addGoal(2, new AdaptiveEndermanTacticsGoal(enderman, tier));
+        if (mob instanceof EnderMan enderman) {
+            mob.goalSelector.addGoal(2, new AdaptiveEndermanTacticsGoal(enderman,
+                    gated(tier, () -> AMConfig.ENABLE_ENDERMAN_AI.get() && AMConfig.AI_ENDERMAN.get())));
         }
-        if (pathfinder != null && mob instanceof Endermite && AMConfig.ENABLE_ENDERMITE_AI.get() && AMConfig.AI_SMALL_SWARM.get()) {
-            mob.goalSelector.addGoal(4, new AdaptiveEndermiteTacticsGoal(pathfinder, tier));
+        if (pathfinder != null && mob instanceof Endermite) {
+            mob.goalSelector.addGoal(4, new AdaptiveEndermiteTacticsGoal(pathfinder,
+                    gated(tier, () -> AMConfig.ENABLE_ENDERMITE_AI.get() && AMConfig.AI_SMALL_SWARM.get())));
         }
-        if (mob instanceof Evoker evoker && AMConfig.ENABLE_RAID_MOB_AI.get()
-                && AMConfig.ENABLE_EVOKER_AI.get() && AMConfig.AI_EVOKER.get()) {
-            mob.goalSelector.addGoal(3, new AdaptiveEvokerTacticsGoal(evoker, tier));
+        if (mob instanceof Evoker evoker) {
+            mob.goalSelector.addGoal(3, new AdaptiveEvokerTacticsGoal(evoker,
+                    gated(tier, () -> AMConfig.ENABLE_RAID_MOB_AI.get()
+                            && AMConfig.ENABLE_EVOKER_AI.get() && AMConfig.AI_EVOKER.get())));
         }
-        if (mob instanceof Guardian guardian && AMConfig.ENABLE_AQUATIC_HOSTILE_AI.get()
-                && AMConfig.ENABLE_GUARDIAN_ADVANCED_AI.get() && AMConfig.AI_GUARDIAN.get()) {
-            mob.goalSelector.addGoal(4, new AdaptiveGuardianTacticsGoal(guardian, tier));
+        if (mob instanceof Guardian guardian) {
+            mob.goalSelector.addGoal(4, new AdaptiveGuardianTacticsGoal(guardian,
+                    gated(tier, () -> AMConfig.ENABLE_AQUATIC_HOSTILE_AI.get()
+                            && AMConfig.ENABLE_GUARDIAN_ADVANCED_AI.get() && AMConfig.AI_GUARDIAN.get())));
         }
-        if (mob instanceof Shulker shulker && AMConfig.ENABLE_END_MOB_AI.get()
-                && AMConfig.ENABLE_SHULKER_ADVANCED_AI.get() && AMConfig.AI_SHULKER.get()) {
-            mob.goalSelector.addGoal(4, new AdaptiveShulkerTacticsGoal(shulker, tier));
+        if (mob instanceof Shulker shulker) {
+            mob.goalSelector.addGoal(4, new AdaptiveShulkerTacticsGoal(shulker,
+                    gated(tier, () -> AMConfig.ENABLE_END_MOB_AI.get()
+                            && AMConfig.ENABLE_SHULKER_ADVANCED_AI.get() && AMConfig.AI_SHULKER.get())));
         }
-        if (mob instanceof Slime slime && AMConfig.AI_SLIME.get()
-                && ((mob instanceof MagmaCube && AMConfig.ENABLE_MAGMA_CUBE_ADVANCED_AI.get())
-                || (!(mob instanceof MagmaCube) && AMConfig.ENABLE_SLIME_ADVANCED_AI.get()))) {
-            mob.goalSelector.addGoal(4, new AdaptiveSlimeTacticsGoal(slime, tier));
+        if (mob instanceof Slime slime) {
+            mob.goalSelector.addGoal(4, new AdaptiveSlimeTacticsGoal(slime,
+                    gated(tier, () -> AMConfig.AI_SLIME.get()
+                            && ((mob instanceof MagmaCube && AMConfig.ENABLE_MAGMA_CUBE_ADVANCED_AI.get())
+                            || (!(mob instanceof MagmaCube) && AMConfig.ENABLE_SLIME_ADVANCED_AI.get())))));
         }
-        if (mob instanceof Ravager ravager && AMConfig.ENABLE_RAID_MOB_AI.get()
-                && AMConfig.ENABLE_RAVAGER_ADVANCED_AI.get() && AMConfig.AI_RAVAGER.get()) {
-            mob.goalSelector.addGoal(4, new AdaptiveRavagerTacticsGoal(ravager, tier));
+        if (mob instanceof Ravager ravager) {
+            mob.goalSelector.addGoal(4, new AdaptiveRavagerTacticsGoal(ravager,
+                    gated(tier, () -> AMConfig.ENABLE_RAID_MOB_AI.get()
+                            && AMConfig.ENABLE_RAVAGER_ADVANCED_AI.get() && AMConfig.AI_RAVAGER.get())));
         }
-        if (isAirborneMob(mob) && airborneEnabled(mob)) {
-            mob.goalSelector.addGoal(4, new AdaptiveAirbornePositioningGoal(mob, tier, airborneRange(mob), airborneVerticalOffset(mob)));
+        if (isAirborneMob(mob)) {
+            mob.goalSelector.addGoal(4, new AdaptiveAirbornePositioningGoal(mob,
+                    gated(tier, () -> airborneEnabled(mob)), airborneRange(mob), airborneVerticalOffset(mob)));
         }
-        if (pathfinder != null && mob instanceof Vex && AMConfig.ENABLE_RAID_MOB_AI.get() && AMConfig.AI_VEX.get()) {
-            mob.goalSelector.addGoal(4, new AdaptiveRetreatAndReengageGoal(pathfinder, tier, 5, 0.10D, 1.2D));
-            mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.30D, 1.2D));
+        if (pathfinder != null && mob instanceof Vex) {
+            IntSupplier vexTier = gated(tier, () -> AMConfig.ENABLE_RAID_MOB_AI.get() && AMConfig.AI_VEX.get());
+            mob.goalSelector.addGoal(4, new AdaptiveRetreatAndReengageGoal(pathfinder, vexTier, 5, 0.10D, 1.2D));
+            mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(pathfinder, vexTier, 4, 0.30D, 1.2D));
         }
-        if (pathfinder != null && mob instanceof AbstractSkeleton && AMConfig.AI_SKELETON.get()) {
+        if (pathfinder != null && mob instanceof AbstractSkeleton) {
             mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.25D, 1.0D));
         }
-        if (pathfinder != null && mob instanceof Pillager && AMConfig.AI_PILLAGER.get()) {
+        if (pathfinder != null && mob instanceof Pillager) {
             mob.goalSelector.addGoal(7, new AdaptiveLowHealthRetreatGoal(pathfinder, tier, 4, 0.28D, 1.0D));
         }
-        if (pathfinder != null && mob instanceof Warden && AMConfig.ENABLE_WARDEN_AI.get() && AMConfig.AI_WARDEN.get()) {
-            mob.goalSelector.addGoal(7, new AdaptiveMeleePositioningGoal(pathfinder, tier, 0.9D, true));
-            if (AMConfig.ENABLE_WARDEN_ADVANCED_AI.get()) {
-                mob.goalSelector.addGoal(8, new AdaptiveWardenTacticsGoal((Warden) mob, tier));
-            }
+        if (pathfinder != null && mob instanceof Warden warden) {
+            IntSupplier wardenTier = gated(tier, () -> AMConfig.ENABLE_WARDEN_AI.get() && AMConfig.AI_WARDEN.get());
+            mob.goalSelector.addGoal(7, new AdaptiveMeleePositioningGoal(pathfinder, wardenTier, 0.9D, true));
+            mob.goalSelector.addGoal(8, new AdaptiveWardenTacticsGoal(warden,
+                    gated(wardenTier, () -> AMConfig.ENABLE_WARDEN_ADVANCED_AI.get())));
         }
     }
 
@@ -308,6 +319,10 @@ public final class AdaptiveGoalInjector {
             return 0.9D;
         }
         return 1.05D;
+    }
+
+    private static IntSupplier gated(IntSupplier tier, BooleanSupplier enabled) {
+        return () -> enabled.getAsBoolean() ? tier.getAsInt() : 0;
     }
 
     public static boolean isAIEnabledFor(Mob mob) {

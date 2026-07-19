@@ -44,9 +44,12 @@ public final class AdaptiveMemory {
             return Optional.empty();
         }
         ServerPlayer player = level.getServer().getPlayerList().getPlayer(entry.playerId);
-        return AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) && mob.canAttack(player)
-                ? Optional.of(player)
-                : Optional.empty();
+        if (player == null || player.level() != level
+                || !AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) || !mob.canAttack(player)) {
+            THREATS.remove(mob);
+            return Optional.empty();
+        }
+        return Optional.of(player);
     }
 
     public static void rememberSound(ServerLevel level, BlockPos pos, SoundKind kind, int ticks) {

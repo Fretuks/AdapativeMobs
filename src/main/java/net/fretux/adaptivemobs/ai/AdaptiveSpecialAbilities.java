@@ -382,12 +382,29 @@ public final class AdaptiveSpecialAbilities {
     }
 
     public static void clear(ServerLevel level) {
-        TEMPORARY_BLOCKS.removeIf(block -> block.server == level.getServer() && block.dimension == level.dimension());
+        TEMPORARY_BLOCKS.removeIf(block -> {
+            if (block.server != level.getServer() || block.dimension != level.dimension()) {
+                return false;
+            }
+            if (level.getBlockState(block.pos).is(Blocks.COBWEB)) {
+                level.removeBlock(block.pos, false);
+            }
+            return true;
+        });
         DELAYED_REAPPEARS.removeIf(pending -> pending.server == level.getServer() && pending.dimension == level.dimension());
     }
 
     public static void clear(net.minecraft.server.MinecraftServer server) {
-        TEMPORARY_BLOCKS.removeIf(block -> block.server == server);
+        TEMPORARY_BLOCKS.removeIf(block -> {
+            if (block.server != server) {
+                return false;
+            }
+            ServerLevel level = server.getLevel(block.dimension);
+            if (level != null && level.getBlockState(block.pos).is(Blocks.COBWEB)) {
+                level.removeBlock(block.pos, false);
+            }
+            return true;
+        });
         DELAYED_REAPPEARS.removeIf(pending -> pending.server == server);
     }
 

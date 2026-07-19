@@ -35,7 +35,8 @@ public class AdaptiveThreatMemoryGoal extends Goal {
             return;
         }
         Player player = remembered.get();
-        if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) || !mob.canAttack(player)) {
+        if (player.level() != mob.level()
+                || !AdaptiveAIGoalUtils.isValidAdaptiveTarget(player) || !mob.canAttack(player)) {
             return;
         }
         if (mob.getTarget() == null || !mob.getTarget().isAlive()) {

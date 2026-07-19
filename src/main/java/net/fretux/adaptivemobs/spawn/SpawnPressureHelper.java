@@ -2,6 +2,8 @@ package net.fretux.adaptivemobs.spawn;
 
 import net.fretux.adaptivemobs.AdaptiveMobs;
 import net.fretux.adaptivemobs.config.AMConfig;
+import net.fretux.adaptivemobs.gear.GearScaler;
+import net.fretux.adaptivemobs.scaling.MobStatScaler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -77,6 +79,8 @@ public final class SpawnPressureHelper {
                         && extra.checkSpawnObstruction(level)) {
                     extra.finalizeSpawn(level, level.getCurrentDifficultyAt(extra.blockPosition()),
                             MobSpawnType.NATURAL, null, null);
+                    MobStatScaler.applyScaling(extra, tier);
+                    GearScaler.applyGear(extra, tier);
                     level.addFreshEntity(extra);
                     if (AMConfig.debug) {
                         AdaptiveMobs.LOGGER.info("[AdaptiveMobs] Extra spawn ({}) at tier {} near {}",
