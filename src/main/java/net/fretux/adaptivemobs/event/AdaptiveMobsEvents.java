@@ -31,13 +31,14 @@ import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.level.BlockEvent.EntityPlaceEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 public class AdaptiveMobsEvents {
 
-    private static final String FRIENDLY_FIRE_SOURCE_KEY = "am_friendly_fire_source";
     private static final String FRIENDLY_FIRE_COUNT_KEY = "am_friendly_fire_count";
     private static final String FRIENDLY_FIRE_EXPIRES_KEY = "am_friendly_fire_expires";
+    private static final String PENDING_SPAWN_PROCESSING_KEY = "am_pending_spawn_processing";
     private static final int FRIENDLY_FIRE_WINDOW_TICKS = 100;
 
     @SubscribeEvent
@@ -69,13 +70,10 @@ public class AdaptiveMobsEvents {
         }
 
         long now = level.getGameTime();
-        String source = attacker.getUUID().toString();
-        boolean sameVolley = source.equals(victim.getPersistentData().getString(FRIENDLY_FIRE_SOURCE_KEY))
-                && victim.getPersistentData().getLong(FRIENDLY_FIRE_EXPIRES_KEY) >= now;
+        boolean sameVolley = victim.getPersistentData().getLong(FRIENDLY_FIRE_EXPIRES_KEY) >= now;
         int hits = sameVolley ? victim.getPersistentData().getInt(FRIENDLY_FIRE_COUNT_KEY) + 1 : 1;
         int toleratedHits = Math.min(4, tier - 1);
         if (hits <= toleratedHits) {
-            victim.getPersistentData().putString(FRIENDLY_FIRE_SOURCE_KEY, source);
             victim.getPersistentData().putInt(FRIENDLY_FIRE_COUNT_KEY, hits);
             victim.getPersistentData().putLong(FRIENDLY_FIRE_EXPIRES_KEY, now + FRIENDLY_FIRE_WINDOW_TICKS);
             event.setCanceled(true);
@@ -85,7 +83,7 @@ public class AdaptiveMobsEvents {
         clearFriendlyFireTolerance(victim);
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = false)
     public void onLivingHurt(LivingHurtEvent event) {
         AdaptiveSpecialAbilities.onLivingHurt(event);
         if (!AMConfig.enabled || !AMConfig.ENABLE_THREAT_MEMORY_AI.get()) {
@@ -128,7 +126,7 @@ public class AdaptiveMobsEvents {
         }
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = false)
     public void onFinalizeSpawn(MobSpawnEvent.FinalizeSpawn event) {
         if (!AMConfig.enabled || !(event.getLevel() instanceof ServerLevel level)) {
             return;
@@ -138,10 +136,8 @@ public class AdaptiveMobsEvents {
             return;
         }
 
+        mob.getPersistentData().putBoolean(PENDING_SPAWN_PROCESSING_KEY, true);
         int tier = AdaptiveDifficultyManager.getMobTier(level, mob.getType());
-        MobStatScaler.applyScaling(mob, tier);
-        GearScaler.applyGear(mob, tier);
-        AdaptiveGoalInjector.inject(mob, level, tier);
         SpawnPressureHelper.maybeSpawnExtra(level, mob, tier, event.getSpawnType());
     }
 
@@ -153,6 +149,14 @@ public class AdaptiveMobsEvents {
             return;
         }
         Entity entity = event.getEntity();
+        if (AMConfig.enabled && entity instanceof Mob mob && mob instanceof Enemy
+                && AMConfig.isMobEnabled(mob.getType())
+                && mob.getPersistentData().getBoolean(PENDING_SPAWN_PROCESSING_KEY)) {
+            mob.getPersistentData().remove(PENDING_SPAWN_PROCESSING_KEY);
+            int tier = AdaptiveDifficultyManager.getMobTier(level, mob.getType());
+            MobStatScaler.applyScaling(mob, tier);
+            GearScaler.applyGear(mob, tier);
+        }
         // Install dormant, config-gated goals on every supported hostile so a later config reload
         // can enable them without requiring the entity to unload and join again.
         if (entity instanceof Mob mob && mob instanceof Enemy) {
@@ -192,7 +196,6 @@ public class AdaptiveMobsEvents {
     }
 
     private static void clearFriendlyFireTolerance(Mob mob) {
-        mob.getPersistentData().remove(FRIENDLY_FIRE_SOURCE_KEY);
         mob.getPersistentData().remove(FRIENDLY_FIRE_COUNT_KEY);
         mob.getPersistentData().remove(FRIENDLY_FIRE_EXPIRES_KEY);
     }

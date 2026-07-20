@@ -56,8 +56,9 @@ public final class AdaptiveMobsCommands {
     }
 
     private static int setTier(CommandSourceStack source, int tier) {
-        AdaptiveSavedData.get(source.getLevel()).setManualGlobalTier(Math.min(tier, AMConfig.maxTier));
-        source.sendSuccess(() -> Component.literal("Adaptive Mobs: manual global tier set to " + tier), true);
+        int appliedTier = Math.min(tier, AMConfig.maxTier);
+        AdaptiveSavedData.get(source.getLevel()).setManualGlobalTier(appliedTier);
+        source.sendSuccess(() -> Component.literal("Adaptive Mobs: manual global tier set to " + appliedTier), true);
         return 1;
     }
 

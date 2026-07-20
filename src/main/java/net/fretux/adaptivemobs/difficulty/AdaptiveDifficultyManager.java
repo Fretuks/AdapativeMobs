@@ -86,7 +86,8 @@ public final class AdaptiveDifficultyManager {
 
     private static int tierFromDay(long day) {
         int tier = 0;
-        for (int t = 1; t <= 5; t++) {
+        int configuredTiers = Math.min(5, AMConfig.DAY_THRESHOLDS.get().size());
+        for (int t = 1; t <= configuredTiers; t++) {
             if (day >= AMConfig.tierValueInt(AMConfig.DAY_THRESHOLDS.get(), t)) {
                 tier = t;
             }
@@ -96,7 +97,8 @@ public final class AdaptiveDifficultyManager {
 
     private static int tierFromKills(long kills) {
         int tier = 0;
-        for (int t = 1; t <= 5; t++) {
+        int configuredTiers = Math.min(5, AMConfig.KILL_THRESHOLDS.get().size());
+        for (int t = 1; t <= configuredTiers; t++) {
             if (kills >= AMConfig.tierValueInt(AMConfig.KILL_THRESHOLDS.get(), t)) {
                 tier = t;
             }

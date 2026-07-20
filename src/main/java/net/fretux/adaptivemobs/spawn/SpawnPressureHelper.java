@@ -2,8 +2,6 @@ package net.fretux.adaptivemobs.spawn;
 
 import net.fretux.adaptivemobs.AdaptiveMobs;
 import net.fretux.adaptivemobs.config.AMConfig;
-import net.fretux.adaptivemobs.gear.GearScaler;
-import net.fretux.adaptivemobs.scaling.MobStatScaler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -13,6 +11,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.phys.AABB;
+import net.minecraftforge.event.ForgeEventFactory;
 
 /**
  * Adds modest spawn pressure: on a natural hostile spawn there is a tier-scaled chance to spawn
@@ -75,12 +74,10 @@ public final class SpawnPressureHelper {
                         random.nextFloat() * 360.0F, 0.0F);
                 // Honour collision, light/biome spawn rules and obstruction checks.
                 if (level.noCollision(extra)
-                        && extra.checkSpawnRules(level, MobSpawnType.NATURAL)
+                        && extra.checkSpawnRules(level, spawnType)
                         && extra.checkSpawnObstruction(level)) {
-                    extra.finalizeSpawn(level, level.getCurrentDifficultyAt(extra.blockPosition()),
-                            MobSpawnType.NATURAL, null, null);
-                    MobStatScaler.applyScaling(extra, tier);
-                    GearScaler.applyGear(extra, tier);
+                    ForgeEventFactory.onFinalizeSpawn(extra, level,
+                            level.getCurrentDifficultyAt(extra.blockPosition()), spawnType, null, null);
                     level.addFreshEntity(extra);
                     if (AMConfig.debug) {
                         AdaptiveMobs.LOGGER.info("[AdaptiveMobs] Extra spawn ({}) at tier {} near {}",

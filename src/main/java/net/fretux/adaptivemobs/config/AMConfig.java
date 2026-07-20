@@ -268,12 +268,10 @@ public final class AMConfig {
     }
 
     public static int tierValueInt(List<? extends Integer> list, int tier1based) {
-        if (list == null || list.isEmpty()) {
+        if (list == null || tier1based <= 0 || tier1based > list.size()) {
             return Integer.MAX_VALUE;
         }
-        int idx = Math.min(tier1based, list.size()) - 1;
-        idx = Math.max(0, idx);
-        return list.get(idx);
+        return list.get(tier1based - 1);
     }
 
     public static int aiScanCooldown(net.minecraft.util.RandomSource random) {

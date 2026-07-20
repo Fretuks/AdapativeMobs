@@ -21,6 +21,8 @@ import net.minecraft.world.item.enchantment.Enchantments;
  */
 public final class GearScaler {
 
+    private static final String GEAR_APPLIED_KEY = "am_gear_applied";
+
     // Material ranks (low -> high) used both to pick new gear and to compare against existing gear.
     private static final Item[] HELMETS = {Items.LEATHER_HELMET, Items.GOLDEN_HELMET, Items.CHAINMAIL_HELMET, Items.IRON_HELMET, Items.DIAMOND_HELMET};
     private static final Item[] CHESTS = {Items.LEATHER_CHESTPLATE, Items.GOLDEN_CHESTPLATE, Items.CHAINMAIL_CHESTPLATE, Items.IRON_CHESTPLATE, Items.DIAMOND_CHESTPLATE};
@@ -32,6 +34,10 @@ public final class GearScaler {
     }
 
     public static void applyGear(Mob mob, int tier) {
+        if (mob.getPersistentData().getBoolean(GEAR_APPLIED_KEY)) {
+            return;
+        }
+        mob.getPersistentData().putBoolean(GEAR_APPLIED_KEY, true);
         if (!AMConfig.GEAR_SCALING_ENABLED.get() || tier <= 0) {
             return;
         }

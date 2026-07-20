@@ -132,15 +132,14 @@ public final class AdaptiveSpecialAbilities {
         if (event.phase != TickEvent.Phase.END || event.getServer() == null) {
             return;
         }
-        long now = event.getServer().overworld().getGameTime();
         Iterator<TemporaryBlock> blockIterator = TEMPORARY_BLOCKS.iterator();
         while (blockIterator.hasNext()) {
             TemporaryBlock block = blockIterator.next();
-            if (now < block.expireTick) {
+            ServerLevel level = block.server == event.getServer() ? event.getServer().getLevel(block.dimension) : null;
+            if (level == null || level.getGameTime() < block.expireTick) {
                 continue;
             }
-            ServerLevel level = block.server == event.getServer() ? event.getServer().getLevel(block.dimension) : null;
-            if (level != null && level.getBlockState(block.pos).is(Blocks.COBWEB)) {
+            if (level.getBlockState(block.pos).is(Blocks.COBWEB)) {
                 level.removeBlock(block.pos, false);
             }
             blockIterator.remove();
@@ -149,12 +148,12 @@ public final class AdaptiveSpecialAbilities {
         Iterator<DelayedReappear> reappearIterator = DELAYED_REAPPEARS.iterator();
         while (reappearIterator.hasNext()) {
             DelayedReappear pending = reappearIterator.next();
-            if (now < pending.tick) {
+            ServerLevel level = pending.server == event.getServer() ? event.getServer().getLevel(pending.dimension) : null;
+            if (level == null || level.getGameTime() < pending.tick) {
                 continue;
             }
-            ServerLevel level = pending.server == event.getServer() ? event.getServer().getLevel(pending.dimension) : null;
-            Entity mobEntity = level == null ? null : level.getEntity(pending.mobId);
-            Entity targetEntity = level == null ? null : level.getEntity(pending.targetId);
+            Entity mobEntity = level.getEntity(pending.mobId);
+            Entity targetEntity = level.getEntity(pending.targetId);
             if (mobEntity instanceof Silverfish mob && targetEntity instanceof LivingEntity target
                     && mob.isAlive() && AdaptiveAIGoalUtils.isValidAdaptiveTarget(target) && mob.canAttack(target)) {
                 Vec3 side = AdaptivePositioningUtils.sidePosition(mob, target, 1.6D,
