@@ -9,15 +9,17 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraftforge.gametest.GameTestHolder;
+import net.minecraftforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Iterator;
 
 @GameTestHolder("adaptivemobs")
+@PrefixGameTestTemplate(false)
 public final class AdaptiveServerBehaviorGameTests {
     private AdaptiveServerBehaviorGameTests() {
     }
 
-    @GameTest(template = "empty")
+    @GameTest(templateNamespace = "minecraft", template = "igloo/top")
     public static void temporaryBlocksSurviveSavedDataReload(GameTestHelper helper) {
         TemporaryBlockSavedData original = new TemporaryBlockSavedData();
         BlockPos pos = helper.absolutePos(new BlockPos(1, 1, 1));
@@ -35,12 +37,15 @@ public final class AdaptiveServerBehaviorGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "empty")
+    @GameTest(templateNamespace = "minecraft", template = "igloo/top")
     public static void slimeRecombinationCancelsWhenStuck(GameTestHelper helper) {
         Slime slime = helper.spawn(EntityType.SLIME, new BlockPos(1, 2, 1));
         Slime partner = helper.spawn(EntityType.SLIME, new BlockPos(8, 2, 1));
         slime.setSize(1, true);
         partner.setSize(1, true);
+        long now = helper.getLevel().getGameTime();
+        slime.getPersistentData().putLong("am_recombine_ready_at", now);
+        partner.getPersistentData().putLong("am_recombine_ready_at", now);
         AdaptiveSlimeTacticsGoal goal = new AdaptiveSlimeTacticsGoal(slime, () -> 5);
 
         helper.assertTrue(goal.canUse(), "slime did not select its eligible partner");

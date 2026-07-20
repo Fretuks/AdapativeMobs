@@ -18,6 +18,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.entity.living.LivingEntityUseItemEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
@@ -57,6 +58,17 @@ public class AdaptiveMobsEvents {
 
     @SubscribeEvent
     public void onLivingAttack(LivingAttackEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player
+                && event.getSource().getEntity() instanceof Mob explosiveMob
+                && event.getSource().is(DamageTypeTags.IS_EXPLOSION)
+                && player.level() instanceof ServerLevel level
+                && AMConfig.enabled && AMConfig.AI_ENABLED.get()
+                && AdaptiveGoalInjector.isAIEnabledFor(explosiveMob)
+                && AdaptiveDifficultyManager.getMobTier(level, explosiveMob.getType()) >= 5
+                && AdaptiveAIGoalUtils.isBlockingShield(player)) {
+            player.disableShield(true);
+            AdaptiveAIGoalUtils.debug(explosiveMob, () -> 5, "mob explosion disabled shield");
+        }
         if (!AMConfig.enabled || !AMConfig.AI_ENABLED.get()
                 || !(event.getEntity() instanceof Mob victim) || !(victim instanceof Enemy)
                 || !(event.getSource().getDirectEntity() instanceof Projectile)
@@ -182,6 +194,7 @@ public class AdaptiveMobsEvents {
 
     @SubscribeEvent
     public void onExplosion(ExplosionEvent.Detonate event) {
+        AdaptiveSpecialAbilities.protectSplitFireballVolley(event);
         if (AMConfig.enabled && AMConfig.ENABLE_SOUND_INVESTIGATION_AI.get()
                 && event.getLevel() instanceof ServerLevel level) {
             AdaptiveMemory.rememberSound(level, event.getExplosion().getPosition(), AdaptiveMemory.SoundKind.EXPLOSION, 20 * 10);

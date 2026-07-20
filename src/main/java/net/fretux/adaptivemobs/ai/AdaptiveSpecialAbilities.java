@@ -27,6 +27,7 @@ import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.Endermite;
 import net.minecraft.world.entity.monster.Evoker;
 import net.minecraft.world.entity.monster.Guardian;
+import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.monster.Phantom;
 import net.minecraft.world.entity.monster.Pillager;
@@ -55,6 +56,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.common.util.BlockSnapshot;
 import net.minecraftforge.event.ForgeEventFactory;
 
@@ -67,6 +69,7 @@ public final class AdaptiveSpecialAbilities {
 
     private static final String COOLDOWN_PREFIX = "am_special_cd_";
     private static final String SPLIT_FIREBALL_KEY = "am_split_fireball";
+    private static final double SPLIT_FIREBALL_SPACING = 1.35D;
     private static final List<DelayedReappear> DELAYED_REAPPEARS = new ArrayList<>();
 
     private AdaptiveSpecialAbilities() {
@@ -241,6 +244,10 @@ public final class AdaptiveSpecialAbilities {
         if (tier <= 0 || !AdaptiveAIGoalUtils.isValidAdaptiveTarget(player)) {
             return;
         }
+        if (mob instanceof MagmaCube && tier >= 3 && mob.getRandom().nextFloat() < 0.50F) {
+            player.setSecondsOnFire(4);
+            AdaptiveAIGoalUtils.debug(mob, () -> tier, "magma cube ignited target");
+        }
         if (tier >= 4 && mob instanceof Drowned && mob.isInWater() && player.isInWater() && ready(mob, "dragging_grip", 160)) {
             player.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 60, 1));
             player.setDeltaMovement(player.getDeltaMovement().add(0.0D, -0.22D, 0.0D));
@@ -363,6 +370,7 @@ public final class AdaptiveSpecialAbilities {
         if (original.getPersistentData().getBoolean(SPLIT_FIREBALL_KEY)) {
             return;
         }
+        original.getPersistentData().putBoolean(SPLIT_FIREBALL_KEY, true);
         Vec3 direction = original.getDeltaMovement();
         if (direction.lengthSqr() < 1.0E-4D && AdaptiveAIGoalUtils.isValidAdaptiveTarget(ghast.getTarget())) {
             direction = ghast.getTarget().getEyePosition().subtract(original.position());
@@ -377,17 +385,26 @@ public final class AdaptiveSpecialAbilities {
         } else {
             side = side.normalize();
         }
-        spawnSplitFireball(level, ghast, original, direction.add(side.scale(0.18D)).normalize());
-        spawnSplitFireball(level, ghast, original, direction.subtract(side.scale(0.18D)).normalize());
+        spawnSplitFireball(level, ghast, original, direction.add(side.scale(0.24D)).normalize(),
+                side.scale(SPLIT_FIREBALL_SPACING));
+        spawnSplitFireball(level, ghast, original, direction.subtract(side.scale(0.24D)).normalize(),
+                side.scale(-SPLIT_FIREBALL_SPACING));
         AdaptiveAIGoalUtils.debug(ghast, () -> 5, "ghast splitting fireball");
     }
 
-    private static void spawnSplitFireball(ServerLevel level, Ghast ghast, LargeFireball original, Vec3 direction) {
+    private static void spawnSplitFireball(ServerLevel level, Ghast ghast, LargeFireball original,
+                                           Vec3 direction, Vec3 offset) {
         LargeFireball split = new LargeFireball(level, ghast, direction.x, direction.y, direction.z,
                 ghast.getExplosionPower());
         split.getPersistentData().putBoolean(SPLIT_FIREBALL_KEY, true);
-        split.setPos(original.getX(), original.getY(), original.getZ());
+        Vec3 position = original.position().add(offset).add(direction.scale(0.35D));
+        split.setPos(position.x, position.y, position.z);
         level.addFreshEntity(split);
+    }
+
+    public static void protectSplitFireballVolley(ExplosionEvent.Detonate event) {
+        event.getAffectedEntities().removeIf(entity -> entity instanceof LargeFireball fireball
+                && fireball.getPersistentData().getBoolean(SPLIT_FIREBALL_KEY));
     }
 
     public static void invalidateTemporaryBlock(ServerLevel level, BlockPos pos) {

@@ -35,6 +35,14 @@ import java.util.function.IntSupplier;
 public class AdaptiveAntiCheeseGoal extends Goal {
 
     private static final double TRAP_VEHICLE_BREAK_DISTANCE_SQR = 9.0D;
+    private static final double ZOMBIE_TOWER_COORDINATION_RADIUS = 12.0D;
+    // A tight radius lets body collision create a permanent crowd around the selected tower.
+    // Four blocks is still local, but allows the mount handoff before the crowd deadlocks.
+    private static final double ZOMBIE_MOUNT_DISTANCE_SQR = 16.0D;
+    private static final double ESTABLISHED_TOWER_MOUNT_DISTANCE_SQR =
+            ZOMBIE_TOWER_COORDINATION_RADIUS * ZOMBIE_TOWER_COORDINATION_RADIUS;
+    private static final String ZOMBIE_CLIMBER_UNTIL_KEY = "am_zombie_climber_until";
+    private static final String LADDER_CLIMBER_UNTIL_KEY = "am_ladder_climber_until";
 
     private final PathfinderMob mob;
     private final IntSupplier tierSupplier;
@@ -56,6 +64,13 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         }
         LivingEntity target = mob.getTarget();
         if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
+            return false;
+        }
+        if (mob instanceof Zombie && mob.isPassenger() && AdaptiveAIGoalUtils.isAdaptiveStackedZombie(mob)) {
+            return true;
+        }
+        if (mob instanceof Zombie
+                && mob.getPersistentData().getLong(ZOMBIE_CLIMBER_UNTIL_KEY) > mob.level().getGameTime()) {
             return false;
         }
         if (isInTrapVehicle() || nearestTrapBlock() != null || trappedAllyVehicle() != null) {
@@ -92,17 +107,23 @@ public class AdaptiveAntiCheeseGoal extends Goal {
             cooldown = 10 + mob.getRandom().nextInt(20);
             return;
         }
-        if (mob instanceof Zombie && mob.isPassenger() && shouldUnstack(target)) {
-            mob.stopRiding();
-            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
-            cooldown = 12 + mob.getRandom().nextInt(18);
-            AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie unstacking");
-            return;
-        }
         if (!AdaptiveAIGoalUtils.isValidAdaptiveTarget(target)) {
             return;
         }
         mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+
+        if (mob instanceof Zombie && mob.isPassenger() && AdaptiveAIGoalUtils.isAdaptiveStackedZombie(mob)) {
+            activePillarTarget = target;
+            activePillarTicks = 40;
+            if (shouldUnstack(target)) {
+                mob.stopRiding();
+                AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+                AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie ladder released after target fell");
+            } else {
+                tryCorpseLadderPressure(target);
+            }
+            return;
+        }
 
         if (mob instanceof Zombie && isVerticalObstacleCheese(target)) {
             activePillarTarget = target;
@@ -181,7 +202,8 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         return activePillarTicks > 0
                 && mob instanceof Zombie
                 && AdaptiveAIGoalUtils.isValidAdaptiveTarget(activePillarTarget)
-                && isVerticalObstacleCheese(activePillarTarget);
+                && ((mob.isPassenger() && AdaptiveAIGoalUtils.isAdaptiveStackedZombie(mob))
+                || isVerticalObstacleCheese(activePillarTarget));
     }
 
     @Override
@@ -289,24 +311,41 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         if (mob.isPassenger() || mob.isVehicle()) {
             return false;
         }
-        List<Zombie> carriers = mob.level().getEntitiesOfClass(Zombie.class, mob.getBoundingBox().inflate(2.0D),
+        List<Zombie> carriers = mob.level().getEntitiesOfClass(Zombie.class,
+                mob.getBoundingBox().inflate(ZOMBIE_TOWER_COORDINATION_RADIUS),
                 zombie -> zombie != mob
                         && zombie.isAlive()
                         && !zombie.isVehicle()
                         && zombie.getTarget() == target
+                        && zombie.getY() < target.getY()
                         && !isInVehicleChain(zombie, mob)
                         && Math.abs(zombie.getY() - mob.getY()) < 8.0D);
         Zombie bestCarrier = null;
-        double best = -1.0D;
+        int bestHeight = -1;
+        int bestBaseId = Integer.MAX_VALUE;
+        double bestDistance = Double.MAX_VALUE;
         for (Zombie carrier : carriers) {
-            double score = stackHeight(carrier) * 10.0D - mob.distanceToSqr(carrier);
-            if (score > best) {
-                best = score;
+            int height = stackHeight(carrier);
+            int baseId = stackBase(carrier).getId();
+            double distance = mob.distanceToSqr(carrier);
+            if (height > bestHeight
+                    || (height == bestHeight && baseId < bestBaseId)
+                    || (height == bestHeight && baseId == bestBaseId && distance < bestDistance)) {
+                bestHeight = height;
+                bestBaseId = baseId;
+                bestDistance = distance;
                 bestCarrier = carrier;
             }
         }
         if (bestCarrier == null) {
             return false;
+        }
+        double mountDistanceSqr = bestHeight > 1
+                ? ESTABLISHED_TOWER_MOUNT_DISTANCE_SQR : ZOMBIE_MOUNT_DISTANCE_SQR;
+        if (bestDistance > mountDistanceSqr) {
+            mob.getNavigation().moveTo(bestCarrier, 1.1D);
+            AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie converging on existing tower");
+            return true;
         }
         boolean mounted = mob.startRiding(bestCarrier, true);
         if (mounted) {
@@ -329,7 +368,28 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         double vertical = target.getY() - mob.getY();
         double horizontal = Math.sqrt((target.getX() - mob.getX()) * (target.getX() - mob.getX())
                 + (target.getZ() - mob.getZ()) * (target.getZ() - mob.getZ()));
-        if (horizontal > 3.2D || vertical < 0.25D || vertical > 5.5D) {
+        if (mob.isVehicle()) {
+            return true;
+        }
+        if (horizontal <= 3.2D && vertical <= 1.0D) {
+            long now = mob.level().getGameTime();
+            if (base.getPersistentData().getLong(LADDER_CLIMBER_UNTIL_KEY) > now) {
+                return true;
+            }
+            base.getPersistentData().putLong(LADDER_CLIMBER_UNTIL_KEY, now + 60L);
+            mob.stopRiding();
+            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
+            mob.getPersistentData().putLong(ZOMBIE_CLIMBER_UNTIL_KEY, now + 80L);
+            Vec3 toward = target.position().subtract(mob.position());
+            double len = Math.max(0.001D, Math.sqrt(toward.x * toward.x + toward.z * toward.z));
+            mob.setDeltaMovement(toward.x / len * 0.30D, 0.34D, toward.z / len * 0.30D);
+            mob.hurtMarked = true;
+            mob.getNavigation().moveTo(target, 1.2D);
+            activePillarTicks = 0;
+            AdaptiveAIGoalUtils.debug(mob, tierSupplier, "top zombie launched from ladder");
+            return true;
+        }
+        if (horizontal > 3.2D || vertical > 5.5D) {
             return true;
         }
 
@@ -339,10 +399,6 @@ public class AdaptiveAntiCheeseGoal extends Goal {
         mob.setDeltaMovement(mob.getDeltaMovement().add(toward.x / len * 0.18D, lift, toward.z / len * 0.18D));
         mob.hurtMarked = true;
 
-        if (vertical <= 1.8D && horizontal <= 2.4D) {
-            mob.stopRiding();
-            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
-        }
         AdaptiveAIGoalUtils.debug(mob, tierSupplier, "zombie corpse ladder pressure");
         return true;
     }
@@ -368,19 +424,18 @@ public class AdaptiveAntiCheeseGoal extends Goal {
             AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
             return true;
         }
-        if (mob.distanceToSqr(target) > 8.0D * 8.0D) {
-            AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
-            return true;
-        }
         Entity base = stackBase(mob);
         double verticalFromBase = target.getY() - base.getY();
         double horizontalFromBase = Math.sqrt((target.getX() - base.getX()) * (target.getX() - base.getX())
                 + (target.getZ() - base.getZ()) * (target.getZ() - base.getZ()));
-        if (verticalFromBase > 2.5D && horizontalFromBase < 5.5D) {
+        // Preserve the ladder while its base approaches an elevated target. Rider-to-target
+        // distance includes tower height and caused tall, otherwise valid ladders to oscillate.
+        if (verticalFromBase > 2.5D
+                && horizontalFromBase <= ZOMBIE_TOWER_COORDINATION_RADIUS + 4.0D) {
             return false;
         }
         AdaptiveAIGoalUtils.clearAdaptiveStackedZombie(mob);
-        return !isVerticalObstacleCheese(target);
+        return true;
     }
 
     private int stackHeight(Entity entity) {
