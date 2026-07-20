@@ -16,6 +16,10 @@ public final class AdaptiveTargetingUtils {
     private AdaptiveTargetingUtils() {
     }
 
+    public static boolean areCombatAllies(Mob first, Mob second) {
+        return first.isAlliedTo(second) || second.isAlliedTo(first) || first.getType() == second.getType();
+    }
+
     public static List<Mob> nearbyHostiles(Mob mob, double radius, Predicate<Mob> predicate) {
         AABB box = mob.getBoundingBox().inflate(radius);
         List<Mob> found = mob.level().getEntitiesOfClass(Mob.class, box,
@@ -46,7 +50,8 @@ public final class AdaptiveTargetingUtils {
             return false;
         }
         List<Mob> allies = nearbyHostiles(mob, Math.min(16.0D, Math.sqrt(lenSqr) + 2.0D),
-                other -> other.getTarget() == target || other.getTarget() == null);
+                other -> areCombatAllies(mob, other)
+                        && (other.getTarget() == target || other.getTarget() == null));
         for (Mob ally : allies) {
             Vec3 toAlly = ally.position().add(0.0D, ally.getBbHeight() * 0.5D, 0.0D).subtract(start);
             double t = toAlly.dot(line) / lenSqr;

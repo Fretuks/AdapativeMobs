@@ -50,7 +50,9 @@ public class AdaptiveMobsEvents {
     @SubscribeEvent
     public void onLivingDeath(LivingDeathEvent event) {
         LivingEntity killed = event.getEntity();
-        if (!(event.getSource().getEntity() instanceof ServerPlayer player)) {
+        ServerPlayer player = event.getSource().getEntity() instanceof ServerPlayer directPlayer
+                ? directPlayer : killed.getKillCredit() instanceof ServerPlayer creditedPlayer ? creditedPlayer : null;
+        if (player == null) {
             return;
         }
         AdaptiveDifficultyManager.recordKill(player, killed);
@@ -77,7 +79,7 @@ public class AdaptiveMobsEvents {
             return;
         }
         int tier = AdaptiveDifficultyManager.getMobTier(level, victim.getType());
-        if (!attacker.isAlliedTo(victim) && !victim.isAlliedTo(attacker)) {
+        if (!net.fretux.adaptivemobs.ai.AdaptiveTargetingUtils.areCombatAllies(attacker, victim)) {
             return;
         }
         if (tier < 2 || !AMConfig.isMobEnabled(victim.getType())) {
@@ -165,8 +167,7 @@ public class AdaptiveMobsEvents {
         }
         Entity entity = event.getEntity();
         if (AMConfig.enabled && entity instanceof Mob mob && mob instanceof Enemy
-                && AMConfig.isMobEnabled(mob.getType())
-                && mob.getPersistentData().getBoolean(PENDING_SPAWN_PROCESSING_KEY)) {
+                && AMConfig.isMobEnabled(mob.getType())) {
             mob.getPersistentData().remove(PENDING_SPAWN_PROCESSING_KEY);
             int tier = AdaptiveDifficultyManager.getMobTier(level, mob.getType());
             MobStatScaler.applyScaling(mob, tier);
@@ -204,6 +205,18 @@ public class AdaptiveMobsEvents {
     @SubscribeEvent
     public void onServerTick(TickEvent.ServerTickEvent event) {
         AdaptiveSpecialAbilities.onServerTick(event);
+        if (event.phase == TickEvent.Phase.END && AMConfig.enabled
+                && event.getServer().getTickCount() % 100 == 0) {
+            for (ServerLevel level : event.getServer().getAllLevels()) {
+                for (Entity entity : level.getAllEntities()) {
+                    if (entity instanceof Mob mob && mob instanceof Enemy && AMConfig.isMobEnabled(mob.getType())) {
+                        int tier = AdaptiveDifficultyManager.getMobTier(level, mob.getType());
+                        MobStatScaler.applyScaling(mob, tier);
+                        GearScaler.applyGear(mob, tier);
+                    }
+                }
+            }
+        }
     }
 
     @SubscribeEvent

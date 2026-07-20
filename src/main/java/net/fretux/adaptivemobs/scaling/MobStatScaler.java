@@ -32,7 +32,6 @@ public final class MobStatScaler {
      */
     public static void applyScaling(Mob mob, int tier) {
         if (!AMConfig.STAT_SCALING_ENABLED.get() || tier <= 0) {
-            AdaptiveMobData.markScaled(mob, Math.max(tier, 0));
             return;
         }
         if (AdaptiveMobData.isScaled(mob)) {

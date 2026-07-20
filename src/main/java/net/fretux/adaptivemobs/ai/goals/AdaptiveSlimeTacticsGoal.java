@@ -3,6 +3,7 @@ package net.fretux.adaptivemobs.ai.goals;
 import net.fretux.adaptivemobs.ai.AdaptiveAIGoalUtils;
 import net.fretux.adaptivemobs.ai.AdaptivePositioningUtils;
 import net.fretux.adaptivemobs.config.AMConfig;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.MagmaCube;
@@ -147,6 +148,7 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         LivingEntity inheritedTarget = AdaptiveAIGoalUtils.isValidAdaptiveTarget(slime.getTarget())
                 ? slime.getTarget() : partner.getTarget();
         float healthFraction = slime.getHealth() / slime.getMaxHealth();
+        absorbPartnerState(partner);
         partner.discard();
         slime.setSize(Math.min(MAX_RECOMBINE_SIZE, slime.getSize() * 2), false);
         slime.setHealth(Math.max(1.0F, Math.min(slime.getMaxHealth(), slime.getMaxHealth() * healthFraction)));
@@ -157,6 +159,29 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         AdaptiveAIGoalUtils.debug(slime, tierSupplier,
                 slime instanceof MagmaCube ? "magma cube recombined" : "slime recombined");
         return true;
+    }
+
+    private void absorbPartnerState(Slime partner) {
+        if (!slime.hasCustomName() && partner.hasCustomName()) {
+            slime.setCustomName(partner.getCustomName());
+            slime.setCustomNameVisible(partner.isCustomNameVisible());
+        }
+        if (partner.isPersistenceRequired()) {
+            slime.setPersistenceRequired();
+        }
+        partner.getActiveEffects().forEach(effect ->
+                slime.addEffect(new net.minecraft.world.effect.MobEffectInstance(effect)));
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (slime.getItemBySlot(slot).isEmpty() && !partner.getItemBySlot(slot).isEmpty()) {
+                slime.setItemSlot(slot, partner.getItemBySlot(slot).copy());
+            }
+        }
+        slime.getPersistentData().merge(partner.getPersistentData().copy());
+        slime.getPersistentData().remove(RECOMBINE_CLAIM_KEY);
+        slime.getPersistentData().remove(RECOMBINE_CLAIM_EXPIRES_KEY);
+        if (partner.isLeashed() && partner.getLeashHolder() != null) {
+            slime.setLeashedTo(partner.getLeashHolder(), true);
+        }
     }
 
     private boolean validPartner(Slime partner, boolean requireClaim) {
@@ -202,8 +227,6 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
 
     private void scheduleRecombine(int delayTicks) {
         if (slime.getPersistentData().getLong(RECOMBINE_READY_AT_KEY) == 0L) {
-            slime.getPersistentData().putLong(RECOMBINE_READY_AT_KEY, slime.level().getGameTime() + delayTicks);
-        } else if (slime.getSize() > 1) {
             slime.getPersistentData().putLong(RECOMBINE_READY_AT_KEY, slime.level().getGameTime() + delayTicks);
         }
     }

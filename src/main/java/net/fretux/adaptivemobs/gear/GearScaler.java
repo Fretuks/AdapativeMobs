@@ -37,10 +37,10 @@ public final class GearScaler {
         if (mob.getPersistentData().getBoolean(GEAR_APPLIED_KEY)) {
             return;
         }
-        mob.getPersistentData().putBoolean(GEAR_APPLIED_KEY, true);
         if (!AMConfig.GEAR_SCALING_ENABLED.get() || tier <= 0) {
             return;
         }
+        mob.getPersistentData().putBoolean(GEAR_APPLIED_KEY, true);
         RandomSource random = mob.getRandom();
 
         if (mob instanceof AbstractSkeleton skeleton) {
