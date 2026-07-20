@@ -3,6 +3,7 @@ package net.fretux.adaptivemobs.ai;
 import net.fretux.adaptivemobs.config.AMConfig;
 import net.fretux.adaptivemobs.difficulty.AdaptiveDifficultyManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
@@ -48,10 +49,13 @@ import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.entity.projectile.ShulkerBullet;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.common.util.BlockSnapshot;
+import net.minecraftforge.event.ForgeEventFactory;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -139,8 +143,8 @@ public final class AdaptiveSpecialAbilities {
             if (level == null || level.getGameTime() < block.expireTick) {
                 continue;
             }
-            if (level.getBlockState(block.pos).is(Blocks.COBWEB)) {
-                level.removeBlock(block.pos, false);
+            if (level.getBlockState(block.pos).equals(block.placedState)) {
+                block.replaced.restore(true, false);
             }
             blockIterator.remove();
         }
@@ -186,7 +190,7 @@ public final class AdaptiveSpecialAbilities {
             AdaptiveAIGoalUtils.debug(mob, () -> tier, "zombified piglin blood call");
         }
         if (tier >= 4 && mob instanceof Spider && ready(mob, "web_retreat", 600)) {
-            placeTemporaryCobweb(level, attacker.blockPosition(), level.getGameTime() + 100 + mob.getRandom().nextInt(61));
+            placeTemporaryCobweb(level, mob, attacker.blockPosition(), level.getGameTime() + 100 + mob.getRandom().nextInt(61));
         }
         if (tier >= 4 && mob instanceof EnderMan enderman && directEntity == attacker && ready(mob, "backstep_ambush", tier >= 5 ? 80 : 130)) {
             Vec3 behind = attacker.position().subtract(attacker.getLookAngle().normalize().scale(2.2D));
@@ -244,7 +248,7 @@ public final class AdaptiveSpecialAbilities {
             shove(player, mob.position(), tier >= 5 ? 0.55D : 0.35D, 0.08D);
         }
         if (mob instanceof Spider && tier >= 4 && ready(mob, "web_hit", mob instanceof CaveSpider ? 400 : 600)) {
-            placeTemporaryCobweb(level, player.blockPosition(), level.getGameTime() + 100 + mob.getRandom().nextInt(61));
+            placeTemporaryCobweb(level, mob, player.blockPosition(), level.getGameTime() + 100 + mob.getRandom().nextInt(61));
         }
         if (mob instanceof CaveSpider && tier >= 3
                 && (AdaptiveAIGoalUtils.isUsingRangedWeapon(player) || player.isUsingItem())) {
@@ -330,13 +334,22 @@ public final class AdaptiveSpecialAbilities {
         target.hurtMarked = true;
     }
 
-    private static void placeTemporaryCobweb(ServerLevel level, BlockPos requestedPos, long expireTick) {
+    private static void placeTemporaryCobweb(ServerLevel level, Mob spider, BlockPos requestedPos, long expireTick) {
         BlockPos pos = level.getFluidState(requestedPos).is(FluidTags.WATER) ? requestedPos.above() : requestedPos;
-        if (!level.getBlockState(pos).isAir() || !level.getWorldBorder().isWithinBounds(pos)) {
+        if (!ForgeEventFactory.getMobGriefingEvent(level, spider)
+                || !level.getBlockState(pos).isAir() || !level.getWorldBorder().isWithinBounds(pos)) {
             return;
         }
-        level.setBlock(pos, Blocks.COBWEB.defaultBlockState(), 3);
-        TEMPORARY_BLOCKS.add(new TemporaryBlock(level.getServer(), level.dimension(), pos.immutable(), expireTick));
+        BlockSnapshot replaced = BlockSnapshot.create(level.dimension(), level, pos);
+        if (ForgeEventFactory.onBlockPlace(spider, replaced, Direction.UP)) {
+            return;
+        }
+        BlockState placedState = Blocks.COBWEB.defaultBlockState();
+        if (!level.setBlock(pos, placedState, 3)) {
+            return;
+        }
+        TEMPORARY_BLOCKS.add(new TemporaryBlock(level.getServer(), level.dimension(), pos.immutable(),
+                expireTick, replaced, placedState));
         level.playSound(null, pos, SoundEvents.SPIDER_AMBIENT, SoundSource.HOSTILE, 0.6F, 1.25F);
     }
 
@@ -385,8 +398,8 @@ public final class AdaptiveSpecialAbilities {
             if (block.server != level.getServer() || block.dimension != level.dimension()) {
                 return false;
             }
-            if (level.getBlockState(block.pos).is(Blocks.COBWEB)) {
-                level.removeBlock(block.pos, false);
+            if (level.getBlockState(block.pos).equals(block.placedState)) {
+                block.replaced.restore(true, false);
             }
             return true;
         });
@@ -399,8 +412,8 @@ public final class AdaptiveSpecialAbilities {
                 return false;
             }
             ServerLevel level = server.getLevel(block.dimension);
-            if (level != null && level.getBlockState(block.pos).is(Blocks.COBWEB)) {
-                level.removeBlock(block.pos, false);
+            if (level != null && level.getBlockState(block.pos).equals(block.placedState)) {
+                block.replaced.restore(true, false);
             }
             return true;
         });
@@ -413,7 +426,7 @@ public final class AdaptiveSpecialAbilities {
 
     private record TemporaryBlock(net.minecraft.server.MinecraftServer server,
                                   net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
-                                  BlockPos pos, long expireTick) {
+                                  BlockPos pos, long expireTick, BlockSnapshot replaced, BlockState placedState) {
     }
 
     private record DelayedReappear(net.minecraft.server.MinecraftServer server,

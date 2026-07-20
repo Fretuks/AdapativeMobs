@@ -25,6 +25,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.common.ForgeHooks;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
@@ -258,6 +259,9 @@ public class AdaptiveAntiCheeseGoal extends Goal {
             return;
         }
         if (mob instanceof Zombie && !AMConfig.ALLOW_ZOMBIE_BLOCK_BREAK.get()) {
+            return;
+        }
+        if (!ForgeHooks.canEntityDestroy(mob.level(), pos, mob)) {
             return;
         }
         if (state.is(Blocks.COBWEB)) {

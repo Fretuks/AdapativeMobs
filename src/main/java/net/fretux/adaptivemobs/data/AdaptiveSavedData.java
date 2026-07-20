@@ -78,8 +78,11 @@ public class AdaptiveSavedData extends SavedData {
     // --- Mutators (mark dirty) --------------------------------------------
 
     public void addKill(String typeKey) {
-        totalHostileKills++;
-        killsByType.merge(typeKey, 1, Integer::sum);
+        if (totalHostileKills < Long.MAX_VALUE) {
+            totalHostileKills++;
+        }
+        killsByType.compute(typeKey, (key, current) ->
+                current == null ? 1 : current < Integer.MAX_VALUE ? current + 1 : Integer.MAX_VALUE);
         setDirty();
     }
 

@@ -1,6 +1,7 @@
 package net.fretux.adaptivemobs.ai;
 
 import net.fretux.adaptivemobs.ai.goals.AdaptiveCreeperPressureGoal;
+import net.fretux.adaptivemobs.ai.goals.AdaptiveCreeperFuseGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveAirbornePositioningGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveAntiCheeseGoal;
 import net.fretux.adaptivemobs.ai.goals.AdaptiveBiomeTacticsGoal;
@@ -109,7 +110,7 @@ public final class AdaptiveGoalInjector {
             // otherwise it can never take over while the zombie is already fighting.
             mob.goalSelector.addGoal(1, new AdaptiveZombiePackTacticsGoal((Zombie) mob, tier));
         } else if (pathfinder != null && mob instanceof Creeper creeper) {
-            creeper.maxSwell = creeperFuseTicks(tier.getAsInt());
+            mob.goalSelector.addGoal(0, new AdaptiveCreeperFuseGoal(creeper, tier));
             mob.goalSelector.addGoal(2, new AdaptiveCreeperPressureGoal(creeper, tier));
             mob.goalSelector.addGoal(4, new AdaptiveFlankGoal(pathfinder, tier, 2, 3.0D, 1.0D, false));
         } else if (pathfinder != null && mob instanceof Spider) {
@@ -349,10 +350,6 @@ public final class AdaptiveGoalInjector {
         if (mob instanceof Warden) return AMConfig.AI_WARDEN.get();
         if (mob instanceof Slime) return AMConfig.AI_SLIME.get();
         return true;
-    }
-
-    private static int creeperFuseTicks(int tier) {
-        return Math.max(18, 30 - Math.max(0, tier - 1) * 3);
     }
 
     private static boolean conservativeMelee(Mob mob) {

@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.BlockSnapshot;
+import net.minecraftforge.common.ForgeHooks;
 import net.minecraftforge.event.ForgeEventFactory;
 
 import java.util.EnumSet;
@@ -341,7 +342,8 @@ public class AdaptiveEndermanTacticsGoal extends Goal {
     }
 
     private boolean pickUpBlock(ServerLevel level, BlockPos pos, String debugMessage) {
-        if (enderman.getCarriedBlock() != null || !isMovableBlock(level, pos)) {
+        if (enderman.getCarriedBlock() != null || !isMovableBlock(level, pos)
+                || !ForgeHooks.canEntityDestroy(level, pos, enderman)) {
             return false;
         }
         BlockState state = level.getBlockState(pos);

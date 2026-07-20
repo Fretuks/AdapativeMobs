@@ -31,15 +31,15 @@ Mob-specific tiers can rise further when players repeatedly kill the same mob ty
 
 At the highest default tier, eligible hostile mobs receive:
 
-- `+75%` max health.
-- `+45%` attack damage when the mob has an attack damage attribute.
-- `+5%` movement speed.
+- `+95%` max health.
+- `+60%` attack damage when the mob has an attack damage attribute.
+- `+7%` movement speed.
 - `+25%` follow range.
-- `+4` armor.
-- `+0.10` knockback resistance.
+- `+6` armor.
+- `+0.18` knockback resistance.
 - A heal to the new maximum health after scaling is applied.
 
-Spawn pressure is also at its highest default value: natural and chunk-generation hostile spawns have a `25%` chance to add one extra mob of the same type nearby. Extra spawns are capped at one per spawn event, obey normal spawn/collision checks, cannot recursively trigger more extras, and are skipped when the local hostile density cap is already reached.
+Spawn pressure is also at its highest default value: natural and chunk-generation hostile spawns have a `40%` chance to add one extra mob of the same type nearby. Extra spawns are capped at one per spawn event, obey normal spawn/collision checks, cannot recursively trigger more extras, and are skipped when the local hostile density cap is already reached.
 
 ## Mob-Specific Tier 5 Behavior
 

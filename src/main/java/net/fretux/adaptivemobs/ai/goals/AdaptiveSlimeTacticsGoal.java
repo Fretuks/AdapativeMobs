@@ -59,8 +59,9 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
     public void start() {
         int tier = tierSupplier.getAsInt();
         if (recombinePartner != null && recombinePartner.isAlive()) {
-            tryRecombine(recombinePartner);
-            recombinePartner = null;
+            if (tryRecombine(recombinePartner)) {
+                recombinePartner = null;
+            }
             return;
         }
         cooldown = Math.max(16, 52 - tier * 5) + slime.getRandom().nextInt(25);
@@ -84,6 +85,25 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         AdaptiveAIGoalUtils.debug(slime, tierSupplier, "slime angled jump pressure");
     }
 
+    @Override
+    public boolean canContinueToUse() {
+        return recombinePartner != null && recombinePartner.isAlive()
+                && slime.isAlive() && tierSupplier.getAsInt() >= 5
+                && slime.getSize() < MAX_RECOMBINE_SIZE;
+    }
+
+    @Override
+    public void tick() {
+        if (recombinePartner != null && tryRecombine(recombinePartner)) {
+            recombinePartner = null;
+        }
+    }
+
+    @Override
+    public void stop() {
+        recombinePartner = null;
+    }
+
     private Slime findRecombinePartner() {
         boolean magma = slime instanceof MagmaCube;
         List<Slime> candidates = slime.level().getEntitiesOfClass(Slime.class,
@@ -94,11 +114,11 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         return candidates.stream().min(Comparator.comparingDouble(slime::distanceToSqr)).orElse(null);
     }
 
-    private void tryRecombine(Slime partner) {
+    private boolean tryRecombine(Slime partner) {
         if (slime.distanceToSqr(partner) > RECOMBINE_DISTANCE_SQR) {
             slime.getLookControl().setLookAt(partner, 30.0F, 30.0F);
             slime.getMoveControl().setWantedPosition(partner.getX(), partner.getY(), partner.getZ(), 1.2D);
-            return;
+            return false;
         }
         LivingEntity inheritedTarget = AdaptiveAIGoalUtils.isValidAdaptiveTarget(slime.getTarget())
                 ? slime.getTarget() : partner.getTarget();
@@ -110,6 +130,7 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         scheduleRecombine(200 + slime.getRandom().nextInt(101));
         AdaptiveAIGoalUtils.debug(slime, tierSupplier,
                 slime instanceof MagmaCube ? "magma cube recombined" : "slime recombined");
+        return true;
     }
 
     private void scheduleRecombine(int delayTicks) {
