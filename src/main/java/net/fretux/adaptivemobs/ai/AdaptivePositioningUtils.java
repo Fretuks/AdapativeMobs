@@ -7,6 +7,9 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.AABB;
 
 public final class AdaptivePositioningUtils {
 
@@ -64,6 +67,9 @@ public final class AdaptivePositioningUtils {
         if (target == null) {
             return false;
         }
+        if (!chunksLoaded(mob, mob.getEyePosition(), target.getEyePosition())) {
+            return false;
+        }
         HitResult hit = mob.level().clip(new ClipContext(mob.getEyePosition(), target.getEyePosition(),
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mob));
         return hit.getType() == HitResult.Type.MISS;
@@ -71,9 +77,25 @@ public final class AdaptivePositioningUtils {
 
     public static boolean isReasonableGround(Mob mob, Vec3 pos) {
         BlockPos block = BlockPos.containing(pos);
-        return mob.level().getWorldBorder().isWithinBounds(block)
-                && !mob.level().getBlockState(block).liquid()
-                && mob.level().getBlockState(block).getCollisionShape(mob.level(), block).isEmpty();
+        BlockPos below = block.below();
+        AABB destinationBox = mob.getBoundingBox().move(pos.subtract(mob.position()));
+        if (!mob.level().getWorldBorder().isWithinBounds(block)
+                || !chunksLoaded(mob, new Vec3(destinationBox.minX, destinationBox.minY, destinationBox.minZ),
+                new Vec3(destinationBox.maxX, destinationBox.maxY, destinationBox.maxZ))
+                || !mob.level().hasChunkAt(below)) {
+            return false;
+        }
+        var state = mob.level().getBlockState(block);
+        var support = mob.level().getBlockState(below);
+        if (state.liquid() || !state.getCollisionShape(mob.level(), block).isEmpty()
+                || !support.isFaceSturdy(mob.level(), below, Direction.UP)
+                || support.is(Blocks.CACTUS) || support.is(Blocks.MAGMA_BLOCK)
+                || support.is(Blocks.CAMPFIRE) || support.is(Blocks.SOUL_CAMPFIRE)
+                || support.is(Blocks.POWDER_SNOW) || support.is(Blocks.FIRE) || support.is(Blocks.SOUL_FIRE)
+                || !mob.level().noCollision(mob, destinationBox)) {
+            return false;
+        }
+        return mob.getNavigation().createPath(block, 0) != null;
     }
 
     public static boolean isOpenToSky(Mob mob) {
@@ -81,7 +103,8 @@ public final class AdaptivePositioningUtils {
     }
 
     public static int localLight(Mob mob, Vec3 pos) {
-        return mob.level().getMaxLocalRawBrightness(BlockPos.containing(pos));
+        BlockPos block = BlockPos.containing(pos);
+        return mob.level().hasChunkAt(block) ? mob.level().getMaxLocalRawBrightness(block) : Integer.MAX_VALUE;
     }
 
     public static Vec3 elevatedPosition(Mob mob, LivingEntity target, double radius) {
@@ -93,5 +116,20 @@ public final class AdaptivePositioningUtils {
             }
         }
         return base;
+    }
+
+    private static boolean chunksLoaded(Mob mob, Vec3 from, Vec3 to) {
+        int minChunkX = ((int) Math.floor(Math.min(from.x, to.x))) >> 4;
+        int maxChunkX = ((int) Math.floor(Math.max(from.x, to.x))) >> 4;
+        int minChunkZ = ((int) Math.floor(Math.min(from.z, to.z))) >> 4;
+        int maxChunkZ = ((int) Math.floor(Math.max(from.z, to.z))) >> 4;
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (!mob.level().hasChunkAt(new BlockPos(chunkX << 4, 0, chunkZ << 4))) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

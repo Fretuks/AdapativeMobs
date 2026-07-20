@@ -199,6 +199,7 @@ public final class AMConfig {
     public static final ForgeConfigSpec.BooleanValue AI_GUARDIAN = BUILDER.define("ai.guardians", true);
     public static final ForgeConfigSpec.BooleanValue AI_PHANTOM = BUILDER.define("ai.phantoms", true);
     public static final ForgeConfigSpec.BooleanValue AI_RAVAGER = BUILDER.define("ai.ravagers", true);
+    public static final ForgeConfigSpec.BooleanValue AI_VINDICATOR = BUILDER.define("ai.vindicators", true);
     public static final ForgeConfigSpec.BooleanValue AI_EVOKER = BUILDER.define("ai.evokers", true);
     public static final ForgeConfigSpec.BooleanValue AI_VEX = BUILDER.define("ai.vexes", true);
     public static final ForgeConfigSpec.BooleanValue AI_PIGLIN_FAMILY = BUILDER.define("ai.piglinFamily", true);

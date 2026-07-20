@@ -7,6 +7,7 @@ import java.util.function.IntSupplier;
 
 /** Keeps the creeper fuse synchronized with the current config-gated adaptive tier. */
 public final class AdaptiveCreeperFuseGoal extends Goal {
+    private static final String ORIGINAL_FUSE_KEY = "am_original_fuse";
     private final Creeper creeper;
     private final IntSupplier tierSupplier;
     private int updateCooldown;
@@ -33,6 +34,17 @@ public final class AdaptiveCreeperFuseGoal extends Goal {
         }
         updateCooldown = 20;
         int tier = tierSupplier.getAsInt();
-        creeper.maxSwell = tier <= 0 ? 30 : Math.max(18, 30 - Math.max(0, tier - 1) * 3);
+        if (tier <= 0) {
+            if (creeper.getPersistentData().contains(ORIGINAL_FUSE_KEY)) {
+                creeper.maxSwell = creeper.getPersistentData().getInt(ORIGINAL_FUSE_KEY);
+                creeper.getPersistentData().remove(ORIGINAL_FUSE_KEY);
+            }
+            return;
+        }
+        if (!creeper.getPersistentData().contains(ORIGINAL_FUSE_KEY)) {
+            creeper.getPersistentData().putInt(ORIGINAL_FUSE_KEY, creeper.maxSwell);
+        }
+        int original = creeper.getPersistentData().getInt(ORIGINAL_FUSE_KEY);
+        creeper.maxSwell = Math.max(18, original - Math.max(0, tier - 1) * 3);
     }
 }

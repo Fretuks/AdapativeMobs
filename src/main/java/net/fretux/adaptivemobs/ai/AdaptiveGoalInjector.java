@@ -297,7 +297,10 @@ public final class AdaptiveGoalInjector {
                 || mob instanceof Hoglin || mob instanceof Zoglin) {
             return AMConfig.ENABLE_NETHER_MOB_AI.get() && AMConfig.AI_PIGLIN_FAMILY.get();
         }
-        if (mob instanceof Vindicator || mob instanceof Ravager) {
+        if (mob instanceof Vindicator) {
+            return AMConfig.ENABLE_RAID_MOB_AI.get() && AMConfig.AI_VINDICATOR.get();
+        }
+        if (mob instanceof Ravager) {
             return AMConfig.ENABLE_RAID_MOB_AI.get() && AMConfig.AI_RAVAGER.get();
         }
         if (mob instanceof Silverfish) {

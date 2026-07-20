@@ -65,6 +65,9 @@ public class AdaptiveMobsEvents {
             return;
         }
         int tier = AdaptiveDifficultyManager.getMobTier(level, victim.getType());
+        if (!attacker.isAlliedTo(victim) && !victim.isAlliedTo(attacker)) {
+            return;
+        }
         if (tier < 2 || !AMConfig.isMobEnabled(victim.getType())) {
             return;
         }

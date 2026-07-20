@@ -2,6 +2,7 @@ package net.fretux.adaptivemobs.ai;
 
 import net.fretux.adaptivemobs.config.AMConfig;
 import net.fretux.adaptivemobs.difficulty.AdaptiveDifficultyManager;
+import net.fretux.adaptivemobs.data.TemporaryBlockSavedData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -66,7 +67,6 @@ public final class AdaptiveSpecialAbilities {
 
     private static final String COOLDOWN_PREFIX = "am_special_cd_";
     private static final String SPLIT_FIREBALL_KEY = "am_split_fireball";
-    private static final List<TemporaryBlock> TEMPORARY_BLOCKS = new ArrayList<>();
     private static final List<DelayedReappear> DELAYED_REAPPEARS = new ArrayList<>();
 
     private AdaptiveSpecialAbilities() {
@@ -136,17 +136,20 @@ public final class AdaptiveSpecialAbilities {
         if (event.phase != TickEvent.Phase.END || event.getServer() == null) {
             return;
         }
-        Iterator<TemporaryBlock> blockIterator = TEMPORARY_BLOCKS.iterator();
+        TemporaryBlockSavedData temporaryBlocks = TemporaryBlockSavedData.get(event.getServer().overworld());
+        Iterator<TemporaryBlockSavedData.Entry> blockIterator = temporaryBlocks.entries();
         while (blockIterator.hasNext()) {
-            TemporaryBlock block = blockIterator.next();
-            ServerLevel level = block.server == event.getServer() ? event.getServer().getLevel(block.dimension) : null;
-            if (level == null || level.getGameTime() < block.expireTick) {
+            TemporaryBlockSavedData.Entry block = blockIterator.next();
+            ServerLevel level = event.getServer().getLevel(net.minecraft.resources.ResourceKey.create(
+                    net.minecraft.core.registries.Registries.DIMENSION, block.dimension()));
+            if (level == null || level.getGameTime() < block.expireTick() || !level.hasChunkAt(block.pos())) {
                 continue;
             }
-            if (level.getBlockState(block.pos).equals(block.placedState)) {
-                block.replaced.restore(true, false);
+            if (level.getBlockState(block.pos()).is(Blocks.COBWEB)) {
+                level.setBlock(block.pos(), Blocks.AIR.defaultBlockState(), 3);
             }
             blockIterator.remove();
+            temporaryBlocks.changed();
         }
 
         Iterator<DelayedReappear> reappearIterator = DELAYED_REAPPEARS.iterator();
@@ -348,8 +351,7 @@ public final class AdaptiveSpecialAbilities {
         if (!level.setBlock(pos, placedState, 3)) {
             return;
         }
-        TEMPORARY_BLOCKS.add(new TemporaryBlock(level.getServer(), level.dimension(), pos.immutable(),
-                expireTick, replaced, placedState));
+        TemporaryBlockSavedData.get(level).add(level, pos, expireTick);
         level.playSound(null, pos, SoundEvents.SPIDER_AMBIENT, SoundSource.HOSTILE, 0.6F, 1.25F);
     }
 
@@ -389,44 +391,19 @@ public final class AdaptiveSpecialAbilities {
     }
 
     public static void invalidateTemporaryBlock(ServerLevel level, BlockPos pos) {
-        TEMPORARY_BLOCKS.removeIf(block -> block.server == level.getServer()
-                && block.dimension == level.dimension() && block.pos.equals(pos));
+        TemporaryBlockSavedData.get(level).remove(level, pos);
     }
 
     public static void clear(ServerLevel level) {
-        TEMPORARY_BLOCKS.removeIf(block -> {
-            if (block.server != level.getServer() || block.dimension != level.dimension()) {
-                return false;
-            }
-            if (level.getBlockState(block.pos).equals(block.placedState)) {
-                block.replaced.restore(true, false);
-            }
-            return true;
-        });
         DELAYED_REAPPEARS.removeIf(pending -> pending.server == level.getServer() && pending.dimension == level.dimension());
     }
 
     public static void clear(net.minecraft.server.MinecraftServer server) {
-        TEMPORARY_BLOCKS.removeIf(block -> {
-            if (block.server != server) {
-                return false;
-            }
-            ServerLevel level = server.getLevel(block.dimension);
-            if (level != null && level.getBlockState(block.pos).equals(block.placedState)) {
-                block.replaced.restore(true, false);
-            }
-            return true;
-        });
         DELAYED_REAPPEARS.removeIf(pending -> pending.server == server);
     }
 
     private static boolean adaptiveAbilitiesEnabled() {
         return AMConfig.enabled && AMConfig.AI_ENABLED.get() && AMConfig.ENABLE_ADVANCED_AI.get();
-    }
-
-    private record TemporaryBlock(net.minecraft.server.MinecraftServer server,
-                                  net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
-                                  BlockPos pos, long expireTick, BlockSnapshot replaced, BlockState placedState) {
     }
 
     private record DelayedReappear(net.minecraft.server.MinecraftServer server,

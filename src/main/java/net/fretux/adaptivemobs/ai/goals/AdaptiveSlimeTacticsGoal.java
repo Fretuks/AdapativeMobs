@@ -17,15 +17,23 @@ import java.util.function.IntSupplier;
 public class AdaptiveSlimeTacticsGoal extends Goal {
 
     private static final String RECOMBINE_READY_AT_KEY = "am_recombine_ready_at";
+    private static final String RECOMBINE_CLAIM_KEY = "am_recombine_claim";
+    private static final String RECOMBINE_CLAIM_EXPIRES_KEY = "am_recombine_claim_expires";
     private static final int MAX_RECOMBINE_SIZE = 4;
     private static final double RECOMBINE_SEARCH_RADIUS = 12.0D;
     private static final double RECOMBINE_DISTANCE_SQR = 3.24D;
+    private static final double MAX_CHASE_DISTANCE_SQR = 256.0D;
+    private static final int MAX_CHASE_TICKS = 200;
+    private static final int MAX_STUCK_TICKS = 40;
 
     private final Slime slime;
     private final IntSupplier tierSupplier;
     private int cooldown;
     private int recombineCheckCooldown;
     private Slime recombinePartner;
+    private int chaseTicks;
+    private int stuckTicks;
+    private Vec3 lastChasePosition;
 
     public AdaptiveSlimeTacticsGoal(Slime slime, IntSupplier tierSupplier) {
         this.slime = slime;
@@ -48,9 +56,10 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
                 && --recombineCheckCooldown <= 0) {
             recombineCheckCooldown = 10;
             recombinePartner = findRecombinePartner();
-            if (recombinePartner != null) {
+            if (recombinePartner != null && claim(recombinePartner)) {
                 return true;
             }
+            recombinePartner = null;
         }
         return AdaptiveAIGoalUtils.isValidAdaptiveTarget(slime.getTarget()) && --cooldown <= 0;
     }
@@ -59,6 +68,9 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
     public void start() {
         int tier = tierSupplier.getAsInt();
         if (recombinePartner != null && recombinePartner.isAlive()) {
+            chaseTicks = 0;
+            stuckTicks = 0;
+            lastChasePosition = slime.position();
             if (tryRecombine(recombinePartner)) {
                 recombinePartner = null;
             }
@@ -87,13 +99,20 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return recombinePartner != null && recombinePartner.isAlive()
-                && slime.isAlive() && tierSupplier.getAsInt() >= 5
-                && slime.getSize() < MAX_RECOMBINE_SIZE;
+        return validPartner(recombinePartner, true) && chaseTicks < MAX_CHASE_TICKS
+                && stuckTicks < MAX_STUCK_TICKS
+                && slime.distanceToSqr(recombinePartner) <= MAX_CHASE_DISTANCE_SQR;
     }
 
     @Override
     public void tick() {
+        chaseTicks++;
+        if (lastChasePosition != null && slime.position().distanceToSqr(lastChasePosition) < 0.0025D) {
+            stuckTicks++;
+        } else {
+            stuckTicks = 0;
+            lastChasePosition = slime.position();
+        }
         if (recombinePartner != null && tryRecombine(recombinePartner)) {
             recombinePartner = null;
         }
@@ -101,6 +120,7 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
 
     @Override
     public void stop() {
+        releaseClaim(recombinePartner);
         recombinePartner = null;
     }
 
@@ -108,13 +128,17 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         boolean magma = slime instanceof MagmaCube;
         List<Slime> candidates = slime.level().getEntitiesOfClass(Slime.class,
                 slime.getBoundingBox().inflate(RECOMBINE_SEARCH_RADIUS),
-                other -> other != slime && other.isAlive() && other.getSize() == slime.getSize()
+                other -> validPartner(other, false)
                         && (other instanceof MagmaCube) == magma
-                        && other.level().getGameTime() >= other.getPersistentData().getLong(RECOMBINE_READY_AT_KEY));
+                        && claimAvailable(other));
         return candidates.stream().min(Comparator.comparingDouble(slime::distanceToSqr)).orElse(null);
     }
 
     private boolean tryRecombine(Slime partner) {
+        if (!validPartner(partner, true) || slime.distanceToSqr(partner) > MAX_CHASE_DISTANCE_SQR) {
+            releaseClaim(partner);
+            return false;
+        }
         if (slime.distanceToSqr(partner) > RECOMBINE_DISTANCE_SQR) {
             slime.getLookControl().setLookAt(partner, 30.0F, 30.0F);
             slime.getMoveControl().setWantedPosition(partner.getX(), partner.getY(), partner.getZ(), 1.2D);
@@ -122,8 +146,10 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         }
         LivingEntity inheritedTarget = AdaptiveAIGoalUtils.isValidAdaptiveTarget(slime.getTarget())
                 ? slime.getTarget() : partner.getTarget();
+        float healthFraction = slime.getHealth() / slime.getMaxHealth();
         partner.discard();
-        slime.setSize(Math.min(MAX_RECOMBINE_SIZE, slime.getSize() * 2), true);
+        slime.setSize(Math.min(MAX_RECOMBINE_SIZE, slime.getSize() * 2), false);
+        slime.setHealth(Math.max(1.0F, Math.min(slime.getMaxHealth(), slime.getMaxHealth() * healthFraction)));
         if (AdaptiveAIGoalUtils.isValidAdaptiveTarget(inheritedTarget)) {
             slime.setTarget(inheritedTarget);
         }
@@ -131,6 +157,47 @@ public class AdaptiveSlimeTacticsGoal extends Goal {
         AdaptiveAIGoalUtils.debug(slime, tierSupplier,
                 slime instanceof MagmaCube ? "magma cube recombined" : "slime recombined");
         return true;
+    }
+
+    private boolean validPartner(Slime partner, boolean requireClaim) {
+        if (partner == null || partner == slime || !partner.isAlive() || !slime.isAlive()
+                || tierSupplier.getAsInt() < 5 || slime.getSize() >= MAX_RECOMBINE_SIZE
+                || partner.getSize() != slime.getSize()
+                || (partner instanceof MagmaCube) != (slime instanceof MagmaCube)) {
+            return false;
+        }
+        long now = slime.level().getGameTime();
+        if (now < slime.getPersistentData().getLong(RECOMBINE_READY_AT_KEY)
+                || now < partner.getPersistentData().getLong(RECOMBINE_READY_AT_KEY)) {
+            return false;
+        }
+        return !requireClaim || (partner.getPersistentData().hasUUID(RECOMBINE_CLAIM_KEY)
+                && partner.getPersistentData().getUUID(RECOMBINE_CLAIM_KEY).equals(slime.getUUID())
+                && partner.getPersistentData().getLong(RECOMBINE_CLAIM_EXPIRES_KEY) >= now);
+    }
+
+    private boolean claimAvailable(Slime partner) {
+        long now = slime.level().getGameTime();
+        return !partner.getPersistentData().hasUUID(RECOMBINE_CLAIM_KEY)
+                || partner.getPersistentData().getLong(RECOMBINE_CLAIM_EXPIRES_KEY) < now;
+    }
+
+    private boolean claim(Slime partner) {
+        if (!validPartner(partner, false) || !claimAvailable(partner)) {
+            return false;
+        }
+        partner.getPersistentData().putUUID(RECOMBINE_CLAIM_KEY, slime.getUUID());
+        partner.getPersistentData().putLong(RECOMBINE_CLAIM_EXPIRES_KEY,
+                slime.level().getGameTime() + MAX_CHASE_TICKS + 1L);
+        return true;
+    }
+
+    private void releaseClaim(Slime partner) {
+        if (partner != null && partner.getPersistentData().hasUUID(RECOMBINE_CLAIM_KEY)
+                && partner.getPersistentData().getUUID(RECOMBINE_CLAIM_KEY).equals(slime.getUUID())) {
+            partner.getPersistentData().remove(RECOMBINE_CLAIM_KEY);
+            partner.getPersistentData().remove(RECOMBINE_CLAIM_EXPIRES_KEY);
+        }
     }
 
     private void scheduleRecombine(int delayTicks) {
